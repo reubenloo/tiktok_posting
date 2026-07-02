@@ -1,2 +1,2 @@
 streamlit>=1.37.0
-# em-posting v0.1.1 - Streamlit Cloud entrypoint and beefed public landing copy
+# em-posting v0.2.0 - polished creator workflow UI and stable runtime rebuild
