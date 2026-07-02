@@ -4,7 +4,7 @@ from textwrap import dedent
 
 import streamlit as st
 
-APP_VERSION = "v0.2.0"
+APP_VERSION = "v0.3.0"
 APP_NAME = "EM Posting"
 
 SHORT_DESCRIPTION = (
@@ -34,14 +34,16 @@ SCOPE_JUSTIFICATION = dedent(
 
 DEMO_SCRIPT = dedent(
     """
-    1. Open the EM Posting dashboard and show the creator workflow overview.
-    2. Open Creator Workspace and explain that a prepared MP4 is selected from the editorial workflow.
-    3. Upload a mock MP4 or use the sample video metadata.
-    4. Review the caption, target account, content category, and compliance checklist.
-    5. Click Approve for TikTok draft handoff.
-    6. Open the Handoff Queue and show the video marked as ready for TikTok draft upload.
-    7. Click the demo Send to TikTok Draft Flow action.
-    8. Explain that production credentials are not stored in the public demo, and the app does not publish directly; the intended TikTok API scope is upload/draft handoff for final human review.
+    0:00 — Open Dashboard. Say: “This is EM Posting, our creator workflow app for prepared eczema education videos.”
+    0:08 — Show the workflow cards: Prepare → Review → Handoff. Explain that every video starts as a finished MP4 from the editorial workflow.
+    0:18 — Open Demo Recorder. Click “Start guided demo” so the screen shows the recording checklist.
+    0:25 — Open Creator Workspace. Use the sample asset or upload a mock MP4. Show file metadata and the caption editor.
+    0:45 — Complete the approval checklist: approved education/founder-story content, caption reviewed, no spam, final posting remains human-reviewed.
+    1:00 — Click “Approve for TikTok draft handoff.”
+    1:08 — Open Handoff Queue. Show the approved item, account label, caption, and readiness status.
+    1:18 — Click “Send to TikTok Draft Flow (demo).” Explain that production TikTok credentials are not in this public demo.
+    1:30 — Open TikTok Review Packet. Show the short app description, review explanation, scope justification, and privacy/terms links.
+    1:45 — Close by saying: “The requested API scope is content upload/draft handoff, not direct mass publishing.”
     """
 ).strip()
 
@@ -109,18 +111,22 @@ st.set_page_config(page_title=APP_NAME, page_icon="🧤", layout="wide")
 st.markdown(
     """
     <style>
-    .stApp { background: linear-gradient(135deg, #fbf7ef 0%, #f7efe2 45%, #eef3ef 100%); }
+    .stApp { background: linear-gradient(135deg, #fbf7ef 0%, #f5ead8 45%, #eaf1ec 100%); }
     section[data-testid="stSidebar"] { background: #111827; }
     section[data-testid="stSidebar"] * { color: #f9fafb !important; }
-    .hero-card { padding: 2rem; border-radius: 24px; background: linear-gradient(135deg, #111827 0%, #20312a 100%); color: white; box-shadow: 0 18px 45px rgba(17,24,39,.18); }
-    .hero-card h1 { font-size: 3.2rem; line-height: 1; margin-bottom: .5rem; color: white; }
-    .hero-card p { font-size: 1.05rem; color: #e5e7eb; }
-    .pill { display: inline-block; padding: .35rem .7rem; border-radius: 999px; background: rgba(255,255,255,.12); margin: .15rem; font-size: .85rem; }
-    .panel { background: rgba(255,255,255,.82); border: 1px solid rgba(17,24,39,.08); border-radius: 20px; padding: 1.2rem; box-shadow: 0 8px 24px rgba(17,24,39,.06); min-height: 145px; }
-    .panel h3 { margin-top: 0; }
-    .metric-card { background: #ffffff; border-radius: 18px; padding: 1rem; border-left: 5px solid #315c45; box-shadow: 0 7px 20px rgba(17,24,39,.07); }
-    .status-ready { color: #065f46; font-weight: 700; }
-    .status-waiting { color: #92400e; font-weight: 700; }
+    .hero-card { padding: 2.4rem; border-radius: 28px; background: radial-gradient(circle at top right, #3b6b50 0%, #111827 48%, #0b111c 100%); color: white; box-shadow: 0 20px 60px rgba(17,24,39,.22); }
+    .hero-card h1 { font-size: 3.7rem; line-height: .95; margin: .4rem 0 .8rem; color: white; letter-spacing: -0.06em; }
+    .hero-card p { font-size: 1.08rem; color: #e5e7eb; max-width: 880px; }
+    .pill { display: inline-block; padding: .38rem .72rem; border-radius: 999px; background: rgba(255,255,255,.13); margin: .15rem; font-size: .84rem; border: 1px solid rgba(255,255,255,.16); }
+    .panel { background: rgba(255,255,255,.88); border: 1px solid rgba(17,24,39,.08); border-radius: 22px; padding: 1.2rem; box-shadow: 0 9px 26px rgba(17,24,39,.07); min-height: 150px; }
+    .panel h3 { margin-top: 0; letter-spacing: -0.03em; }
+    .metric-card { background: #ffffff; border-radius: 18px; padding: 1rem; border-left: 5px solid #315c45; box-shadow: 0 7px 20px rgba(17,24,39,.07); min-height: 86px; }
+    .step { padding: .9rem 1rem; border-radius: 16px; background: white; border: 1px solid rgba(17,24,39,.08); margin-bottom: .55rem; }
+    .step-ready { border-left: 6px solid #047857; }
+    .step-wait { border-left: 6px solid #d97706; }
+    .status-ready { color: #065f46; font-weight: 800; }
+    .status-waiting { color: #92400e; font-weight: 800; }
+    .muted { color: #6b7280; font-size: .92rem; }
     </style>
     """,
     unsafe_allow_html=True,
@@ -132,6 +138,10 @@ if "asset" not in st.session_state:
     st.session_state.asset = None
 if "queue" not in st.session_state:
     st.session_state.queue = []
+if "demo_started" not in st.session_state:
+    st.session_state.demo_started = False
+if "sent_count" not in st.session_state:
+    st.session_state.sent_count = 0
 
 
 def add_event(message):
@@ -150,6 +160,7 @@ def sample_asset():
     return {
         "filename": "eczema-night-routine-founder-story.mp4",
         "size_mb": 18.4,
+        "duration": "00:42",
         "fingerprint": "sample-a7f42c91",
         "source": "Sample review asset",
         "status": "Ready for approval",
@@ -157,7 +168,7 @@ def sample_asset():
 
 
 def render_version():
-    st.caption(f"{APP_VERSION} - polished creator workflow and TikTok draft handoff mock")
+    st.caption(f"{APP_VERSION} - demo-video-ready creator workflow and TikTok draft handoff mock")
 
 
 def render_hero():
@@ -167,13 +178,30 @@ def render_hero():
             <div class="pill">creator operations</div>
             <div class="pill">human review</div>
             <div class="pill">TikTok draft handoff</div>
+            <div class="pill">prepared MP4 workflow</div>
             <h1>EM Posting</h1>
-            <p>A focused workflow app for reviewing approved eczema education videos before sending them into TikTok's upload or draft flow.</p>
-            <p>No mass publishing. No secret tokens in this demo. Just a clean creator review lane from prepared MP4 → caption check → approval → draft handoff.</p>
+            <p>A creator workflow app for reviewing approved eczema education videos before sending them into TikTok's upload or draft flow.</p>
+            <p>Built for a small authorized content team: select the prepared video, confirm the story and caption, complete the approval checks, then queue a draft-style TikTok handoff. No mass publishing, no hidden credentials, no autoposting theater.</p>
         </div>
         """,
         unsafe_allow_html=True,
     )
+
+
+def workflow_progress():
+    has_asset = st.session_state.asset is not None
+    has_queue = len(st.session_state.queue) > 0
+    has_sent = st.session_state.sent_count > 0
+    steps = [
+        ("asset selected", has_asset),
+        ("caption reviewed", has_queue),
+        ("approved for handoff", has_queue),
+        ("draft handoff demo sent", has_sent),
+    ]
+    for label, done in steps:
+        klass = "step step-ready" if done else "step step-wait"
+        icon = "✅" if done else "⏳"
+        st.markdown(f'<div class="{klass}">{icon} <b>{label}</b></div>', unsafe_allow_html=True)
 
 
 def render_dashboard():
@@ -183,42 +211,79 @@ def render_dashboard():
 
     col1, col2, col3, col4 = st.columns(4)
     with col1:
-        st.markdown('<div class="metric-card"><b>Workflow</b><br><span class="status-ready">review-first</span></div>', unsafe_allow_html=True)
+        st.markdown('<div class="metric-card"><b>workflow</b><br><span class="status-ready">review-first</span></div>', unsafe_allow_html=True)
     with col2:
-        st.markdown('<div class="metric-card"><b>Posting mode</b><br><span class="status-ready">draft handoff</span></div>', unsafe_allow_html=True)
+        st.markdown('<div class="metric-card"><b>posting mode</b><br><span class="status-ready">draft handoff</span></div>', unsafe_allow_html=True)
     with col3:
-        st.markdown('<div class="metric-card"><b>Users</b><br>authorized creators</div>', unsafe_allow_html=True)
+        st.markdown('<div class="metric-card"><b>users</b><br>authorized creators</div>', unsafe_allow_html=True)
     with col4:
-        st.markdown('<div class="metric-card"><b>API request</b><br>video.upload</div>', unsafe_allow_html=True)
+        st.markdown('<div class="metric-card"><b>requested API</b><br>Content Posting / video.upload</div>', unsafe_allow_html=True)
 
-    st.markdown("## How the creator workflow works")
+    st.markdown("## Product walkthrough")
     c1, c2, c3 = st.columns(3)
     with c1:
-        st.markdown('<div class="panel"><h3>1. ingest asset</h3><p>Select a finished MP4 from the editorial workflow. The app reads basic file metadata and prepares a review card.</p></div>', unsafe_allow_html=True)
+        st.markdown('<div class="panel"><h3>1. prepare</h3><p>Select a finished MP4 from the editorial workflow. The app creates a clean review card with file metadata.</p></div>', unsafe_allow_html=True)
     with c2:
-        st.markdown('<div class="panel"><h3>2. review story + caption</h3><p>Confirm the content category, caption, creator account, and approval checklist before handoff.</p></div>', unsafe_allow_html=True)
+        st.markdown('<div class="panel"><h3>2. review</h3><p>Choose the account, content category, caption, and safety approvals before anything leaves the workspace.</p></div>', unsafe_allow_html=True)
     with c3:
-        st.markdown('<div class="panel"><h3>3. send to draft flow</h3><p>The intended TikTok integration uploads approved videos into TikTok draft/posting flow for final human control.</p></div>', unsafe_allow_html=True)
+        st.markdown('<div class="panel"><h3>3. handoff</h3><p>Queue the video for TikTok draft upload. The public demo simulates the API action without storing credentials.</p></div>', unsafe_allow_html=True)
 
-    st.markdown("## Why this exists")
-    st.write(
-        "Eczema Mitten / Reuben Eczema creates educational short-form content around eczema care, founder-story moments, and product education. "
-        "EM Posting gives the creator team a simple review station so prepared videos are checked before they leave the editorial workflow."
-    )
+    left, right = st.columns([0.62, 0.38])
+    with left:
+        st.markdown("## Why this exists")
+        st.write(
+            "Eczema Mitten / Reuben Eczema creates educational short-form content around eczema care, founder-story moments, and product education. "
+            "EM Posting gives the creator team a simple review station so prepared videos are checked before they move into TikTok."
+        )
+        st.markdown("## Demo-ready path")
+        st.write("For recording, go in this order: **Demo Recorder → Creator Workspace → Handoff Queue → TikTok Review Packet**.")
+    with right:
+        st.markdown("## Current demo progress")
+        workflow_progress()
+
+
+def render_demo_recorder():
+    st.title("Demo Recorder")
+    render_version()
+    st.write("Use this page while recording the TikTok app review video. It gives you a clean script, timing, and the exact order to click through.")
+
+    col1, col2 = st.columns([0.35, 0.65])
+    with col1:
+        if st.button("Start guided demo", type="primary"):
+            st.session_state.demo_started = True
+            add_event("Started guided demo recording flow")
+        if st.button("Reset demo state"):
+            st.session_state.asset = None
+            st.session_state.queue = []
+            st.session_state.sent_count = 0
+            st.session_state.events = []
+            st.session_state.demo_started = False
+            st.success("Demo state reset.")
+        st.markdown("### Screen checklist")
+        workflow_progress()
+    with col2:
+        if st.session_state.demo_started:
+            st.success("Guided demo mode is active. Start on Dashboard, then continue through the pages below.")
+        else:
+            st.warning("Click Start guided demo before recording so the activity log captures the flow.")
+        st.text_area("Narration script", DEMO_SCRIPT, height=430)
+        st.download_button("Download demo script", DEMO_SCRIPT, file_name="em-posting-demo-script.txt")
 
 
 def render_workspace():
     st.title("Creator Workspace")
     render_version()
-    st.info("This is a functional mock workflow for app review. The final TikTok API call is intentionally disabled until app approval and secure credentials are configured.")
+    st.info("Functional mock for app review: you can use the sample asset or upload a mock MP4. The final TikTok API call is disabled until approval and secure credentials are configured.")
 
-    left, right = st.columns([1.1, 0.9])
+    left, right = st.columns([1.05, 0.95])
     with left:
         st.subheader("1. Select prepared video")
         mode = st.radio("Asset source", ["Use sample review asset", "Upload mock MP4"], horizontal=True)
         uploaded = None
         if mode == "Upload mock MP4":
             uploaded = st.file_uploader("Prepared MP4", type=["mp4"])
+            if uploaded:
+                st.video(uploaded)
 
         if st.button("Load asset for review", type="primary"):
             if mode == "Use sample review asset":
@@ -231,6 +296,7 @@ def render_workspace():
                 st.session_state.asset = {
                     "filename": uploaded.name,
                     "size_mb": round(size / (1024 * 1024), 2),
+                    "duration": "uploaded file",
                     "fingerprint": digest,
                     "source": "Uploaded demo file",
                     "status": "Ready for approval",
@@ -238,8 +304,16 @@ def render_workspace():
                 add_event(f"Loaded uploaded asset: {uploaded.name}")
 
         if st.session_state.asset:
-            st.markdown("### Asset card")
-            st.json(st.session_state.asset)
+            st.markdown("### Asset review card")
+            with st.container(border=True):
+                a = st.session_state.asset
+                st.markdown(f"#### {a['filename']}")
+                st.write(f"**Source:** {a['source']}  |  **Size:** {a['size_mb']} MB  |  **Duration:** {a['duration']}")
+                st.write(f"**Fingerprint:** `{a['fingerprint']}`")
+                st.markdown(f"<span class='status-ready'>{a['status']}</span>", unsafe_allow_html=True)
+        else:
+            st.markdown("### Asset review card")
+            st.markdown("<div class='panel'><h3>No asset loaded yet</h3><p>Use the sample asset for a clean demo recording, or upload a mock MP4 if you want to show the file picker.</p></div>", unsafe_allow_html=True)
 
     with right:
         st.subheader("2. Review metadata")
@@ -248,11 +322,12 @@ def render_workspace():
         caption = st.text_area(
             "Caption",
             "Night routine for eczema flare protection. Reviewed by the Eczema Mitten creator team before TikTok draft handoff.",
-            height=130,
+            height=125,
         )
+        hashtags = st.text_input("Hashtags", "#eczema #eczemacare #sensitiveskin #eczemamitten")
         st.subheader("3. Approval checklist")
         approved = st.checkbox("Content is approved eczema education / founder-story material")
-        reviewed = st.checkbox("Caption and account label reviewed")
+        reviewed = st.checkbox("Caption, hashtags, and account label reviewed")
         safe = st.checkbox("No spam, deception, or mass-publishing behavior")
         human = st.checkbox("Final TikTok posting remains human-reviewed")
 
@@ -267,6 +342,7 @@ def render_workspace():
                     "account": account,
                     "category": category,
                     "caption": caption,
+                    "hashtags": hashtags,
                     "queued_at": datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC"),
                     "handoff_status": "Ready for TikTok draft flow",
                 }
@@ -286,15 +362,19 @@ def render_queue():
 
     for index, item in enumerate(st.session_state.queue):
         with st.container(border=True):
-            col1, col2 = st.columns([0.75, 0.25])
+            col1, col2 = st.columns([0.72, 0.28])
             with col1:
                 st.markdown(f"### {item['filename']}")
                 st.write(f"**Account:** {item['account']}  |  **Category:** {item['category']}  |  **Size:** {item['size_mb']} MB")
                 st.write(f"**Caption:** {item['caption']}")
+                st.write(f"**Hashtags:** {item['hashtags']}")
                 st.markdown(f"<span class='status-ready'>{item['handoff_status']}</span>", unsafe_allow_html=True)
             with col2:
-                if st.button("Send to TikTok Draft Flow", key=f"send_{index}"):
+                st.markdown("#### API handoff mock")
+                st.code("POST /v2/post/publish/inbox/video/init/", language="http")
+                if st.button("Send to TikTok Draft Flow (demo)", key=f"send_{index}"):
                     item["handoff_status"] = "Demo sent to TikTok draft flow"
+                    st.session_state.sent_count += 1
                     add_event(f"Demo TikTok draft handoff completed for {item['filename']}")
                     st.success("Demo handoff complete. In production this would call TikTok's upload/draft endpoint.")
 
@@ -317,6 +397,11 @@ def render_review_packet():
 {DEMO_SCRIPT}
 """
     st.download_button("Download review packet", packet, file_name="em-posting-tiktok-review-packet.md", mime="text/markdown")
+    st.markdown("## Copy/paste fields")
+    st.text_area("Description under 120 characters", SHORT_DESCRIPTION, height=80)
+    st.text_area("App review explanation under 1000 characters", APP_REVIEW_EXPLANATION, height=190)
+    st.text_area("Scope/product justification", SCOPE_JUSTIFICATION, height=180)
+    st.markdown("## Full packet")
     st.markdown(packet)
 
 
@@ -345,13 +430,15 @@ with st.sidebar:
     st.markdown("# 🧤 EM Posting")
     page = st.radio(
         "Navigate",
-        ["Dashboard", "Creator Workspace", "Handoff Queue", "TikTok Review Packet", "Terms", "Privacy", "Activity Log"],
+        ["Dashboard", "Demo Recorder", "Creator Workspace", "Handoff Queue", "TikTok Review Packet", "Terms", "Privacy", "Activity Log"],
     )
     st.divider()
     st.caption("Public review demo. Production credentials are not included.")
 
 if page == "Dashboard":
     render_dashboard()
+elif page == "Demo Recorder":
+    render_demo_recorder()
 elif page == "Creator Workspace":
     render_workspace()
 elif page == "Handoff Queue":

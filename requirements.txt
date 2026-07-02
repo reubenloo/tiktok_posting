@@ -1,2 +1,2 @@
 streamlit>=1.37.0
-# em-posting v0.2.0 - polished creator workflow UI and stable runtime rebuild
+# em-posting v0.3.0 - demo recorder and video-ready creator workflow rebuild
