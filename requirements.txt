@@ -1,0 +1,2 @@
+streamlit>=1.37.0
+# em-posting v0.1.0 - initial TikTok app review demo rebuild marker
