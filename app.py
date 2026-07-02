@@ -4,7 +4,7 @@ from textwrap import dedent
 
 import streamlit as st
 
-APP_VERSION = "v0.3.0"
+APP_VERSION = "v0.4.0"
 APP_NAME = "EM Posting"
 
 SHORT_DESCRIPTION = (
@@ -31,6 +31,31 @@ SCOPE_JUSTIFICATION = dedent(
     The integration is used by authorized creators to move approved eczema education and founder-story videos from our editorial workflow into TikTok without manual file transfer. A team member reviews the video and caption before sending it to TikTok, and final posting remains under human control.
     """
 ).strip()
+
+
+PRODUCTION_INTEGRATION_NOTES = dedent(
+    """
+    Planned production integration:
+
+    - Product: TikTok Content Posting API.
+    - Preferred scope: video.upload, because EM Posting is designed for upload-to-draft / inbox handoff rather than automatic public publishing.
+    - Expected endpoint: /v2/post/publish/inbox/video/init/.
+    - Transfer method: FILE_UPLOAD for a creator-selected local MP4. PULL_FROM_URL should only be used later if the production video host/domain is verified in TikTok developer settings.
+    - Creator control: after upload, the TikTok creator receives an inbox notification and completes final editing/posting in TikTok.
+    - Rate/spam posture: the app is intentionally narrow and review-gated. It is not a bulk scheduler, scraper, engagement bot, or mass publisher.
+    - Secrets: OAuth credentials and access tokens must be stored in Streamlit secrets or another private production secret store, never in this public repository.
+    """
+).strip()
+
+REVIEW_READINESS_CHECKLIST = [
+    "Public landing/dashboard explains the creator workflow.",
+    "Terms of Service and Privacy Policy are accessible from the app navigation.",
+    "Demo Recorder gives a clear app-review video script.",
+    "Creator Workspace shows asset selection, caption review, and consent checks.",
+    "Handoff Queue shows a draft-upload style TikTok API handoff mock.",
+    "TikTok Review Packet includes app description, review explanation, and scope justification.",
+    "No production secrets, access tokens, private videos, cookies, or customer data are committed.",
+]
 
 DEMO_SCRIPT = dedent(
     """
@@ -330,11 +355,12 @@ def render_workspace():
         reviewed = st.checkbox("Caption, hashtags, and account label reviewed")
         safe = st.checkbox("No spam, deception, or mass-publishing behavior")
         human = st.checkbox("Final TikTok posting remains human-reviewed")
+        consent = st.checkbox("Creator expressly consents to send this approved video to TikTok draft flow")
 
         if st.button("Approve for TikTok draft handoff"):
             if not st.session_state.asset:
                 st.error("Load an asset first.")
-            elif not all([approved, reviewed, safe, human]):
+            elif not all([approved, reviewed, safe, human, consent]):
                 st.error("Complete all approval checks before queueing.")
             else:
                 item = {
@@ -344,6 +370,7 @@ def render_workspace():
                     "caption": caption,
                     "hashtags": hashtags,
                     "queued_at": datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC"),
+                    "creator_consent": "Confirmed",
                     "handoff_status": "Ready for TikTok draft flow",
                 }
                 st.session_state.queue.insert(0, item)
@@ -355,6 +382,9 @@ def render_queue():
     st.title("Handoff Queue")
     render_version()
     st.write("Approved videos waiting for TikTok upload/draft handoff.")
+    st.info("TikTok upload API note: after a successful upload-to-draft/inbox handoff, the creator continues final editing and posting from TikTok. This demo intentionally stops before any real API call.")
+    if len(st.session_state.queue) >= 5:
+        st.warning("Review guardrail: TikTok documents pending-share limits. Keep the queue small and creator-reviewed; this app is not a bulk publisher.")
 
     if not st.session_state.queue:
         st.warning("No approved videos yet. Open Creator Workspace and approve a sample asset.")
@@ -368,6 +398,7 @@ def render_queue():
                 st.write(f"**Account:** {item['account']}  |  **Category:** {item['category']}  |  **Size:** {item['size_mb']} MB")
                 st.write(f"**Caption:** {item['caption']}")
                 st.write(f"**Hashtags:** {item['hashtags']}")
+                st.write(f"**Creator consent:** {item.get('creator_consent', 'Confirmed during review')}")
                 st.markdown(f"<span class='status-ready'>{item['handoff_status']}</span>", unsafe_allow_html=True)
             with col2:
                 st.markdown("#### API handoff mock")
@@ -405,6 +436,55 @@ def render_review_packet():
     st.markdown(packet)
 
 
+def render_production_plan():
+    st.title("Production Integration Plan")
+    render_version()
+    st.write("This page is here for app review and implementation clarity. It separates the public demo from the intended production TikTok integration.")
+
+    col1, col2 = st.columns([0.55, 0.45])
+    with col1:
+        st.markdown("## Requested TikTok API use")
+        st.markdown(PRODUCTION_INTEGRATION_NOTES)
+    with col2:
+        st.markdown("## What EM Posting is not")
+        st.markdown("- Not a direct mass publisher")
+        st.markdown("- Not an engagement, comment, or scraping bot")
+        st.markdown("- Not an auto-generated content spam system")
+        st.markdown("- Not requesting analytics, follower, DM, or comment scopes")
+        st.markdown("- Not storing production tokens in this public app")
+
+    st.markdown("## Upload flow shape")
+    st.code(
+        """1. Authorized creator selects an approved MP4
+2. Creator reviews caption, hashtags, and account label
+3. Creator confirms consent and safety checklist
+4. Production app initializes TikTok video.upload inbox flow
+5. Video transfers to TikTok
+6. Creator receives TikTok inbox notification
+7. Creator completes final editing/posting in TikTok""",
+        language="text",
+    )
+
+
+def render_readiness():
+    st.title("Review Readiness")
+    render_version()
+    st.write("Final checklist before recording or submitting for TikTok developer review.")
+    for item in REVIEW_READINESS_CHECKLIST:
+        st.checkbox(item, value=True, disabled=True)
+    st.divider()
+    st.markdown("## Recommended recording path")
+    st.markdown("1. Dashboard → 2. Demo Recorder → 3. Creator Workspace → 4. Handoff Queue → 5. TikTok Review Packet → 6. Terms/Privacy")
+    st.markdown("## Streamlit deploy settings")
+    st.code(
+        "Repository: reubenloo/tiktok_posting\n"
+        "Branch: main\n"
+        "Main file path: streamlit_app.py\n"
+        "Python: select 3.12 in Streamlit Cloud settings if available",
+        language="text",
+    )
+
+
 def render_terms():
     st.title("Terms of Service")
     render_version()
@@ -430,7 +510,7 @@ with st.sidebar:
     st.markdown("# 🧤 EM Posting")
     page = st.radio(
         "Navigate",
-        ["Dashboard", "Demo Recorder", "Creator Workspace", "Handoff Queue", "TikTok Review Packet", "Terms", "Privacy", "Activity Log"],
+        ["Dashboard", "Demo Recorder", "Creator Workspace", "Handoff Queue", "TikTok Review Packet", "Production Plan", "Review Readiness", "Terms", "Privacy", "Activity Log"],
     )
     st.divider()
     st.caption("Public review demo. Production credentials are not included.")
@@ -445,6 +525,10 @@ elif page == "Handoff Queue":
     render_queue()
 elif page == "TikTok Review Packet":
     render_review_packet()
+elif page == "Production Plan":
+    render_production_plan()
+elif page == "Review Readiness":
+    render_readiness()
 elif page == "Terms":
     render_terms()
 elif page == "Privacy":

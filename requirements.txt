@@ -1,2 +1,2 @@
-streamlit>=1.37.0
-# em-posting v0.3.0 - demo recorder and video-ready creator workflow rebuild
+streamlit>=1.37.0,<1.59
+# em-posting v0.4.0 - review-readiness polish with stable Streamlit cap
