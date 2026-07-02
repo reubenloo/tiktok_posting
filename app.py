@@ -4,7 +4,7 @@ from textwrap import dedent
 
 import streamlit as st
 
-APP_VERSION = "v0.1.0"
+APP_VERSION = "v0.1.1"
 APP_NAME = "EM Posting"
 
 SHORT_DESCRIPTION = (
@@ -129,23 +129,47 @@ def render_header():
 
 def render_landing():
     render_header()
-    st.subheader("Private creator workflow for approved eczema education videos")
+    st.subheader("Creator review workspace for health education videos")
     st.write(
-        "EM Posting helps authorized Eczema Mitten / Reuben Eczema team members review prepared short-form videos, "
-        "confirm captions and metadata, and send approved MP4 files into TikTok's upload or draft flow for final human posting."
+        "EM Posting is a focused creator operations app for preparing short-form videos before they move into a platform posting workflow. "
+        "The app gives a small authorized team one place to review a finished MP4, confirm the caption and account label, check policy-safe approvals, "
+        "and hand the video to TikTok's upload or draft flow for final human review."
     )
-    st.info("This public demo shows the review workflow. It does not include production TikTok credentials and does not publish directly.")
+    st.info("Public demo mode: this site shows the real review workflow shape, but it does not include production TikTok credentials and does not publish directly.")
+
+    st.markdown("### Built for a creator team, not mass publishing")
+    st.write(
+        "The workflow is intentionally narrow: prepared eczema education and founder-story videos, manual approval, and a draft-style handoff. "
+        "It is designed to reduce file-transfer friction while keeping creator judgment in the loop."
+    )
 
     col1, col2, col3 = st.columns(3)
     with col1:
-        st.markdown("### 1. Prepared videos")
-        st.write("Finished MP4 files come from the internal editorial workflow, not from automated spam generation.")
+        st.markdown("### 1. Prepare")
+        st.write("A finished MP4 from the editorial workflow is selected for review. The demo keeps this local to the session.")
     with col2:
-        st.markdown("### 2. Human review")
-        st.write("An authorized team member checks the content, caption, account label, and approval checklist.")
+        st.markdown("### 2. Review")
+        st.write("The creator checks the caption, destination account, education/founder-story fit, and anti-spam approvals.")
     with col3:
-        st.markdown("### 3. TikTok draft handoff")
-        st.write("The requested API access uploads approved videos to TikTok's posting/draft flow for final review.")
+        st.markdown("### 3. Handoff")
+        st.write("The TikTok integration is intended to upload approved videos into TikTok's draft/posting flow for final human control.")
+
+    st.markdown("### Who this app is for")
+    st.write(
+        "EM Posting is for approved Eczema Mitten / Reuben Eczema creators and operators who manage educational short-form content. "
+        "It is not a consumer social network, analytics suite, or autonomous publisher."
+    )
+
+    st.markdown("### Safety and platform alignment")
+    safety_col1, safety_col2 = st.columns(2)
+    with safety_col1:
+        st.markdown("- Human approval before TikTok handoff")
+        st.markdown("- Prepared MP4 videos only")
+        st.markdown("- No public mass-posting access")
+    with safety_col2:
+        st.markdown("- No production secrets in this demo")
+        st.markdown("- No direct publish claim")
+        st.markdown("- Requested scope limited to content upload/draft workflow")
 
     st.markdown("### TikTok developer app fields")
     st.text_area("Description under 120 characters", SHORT_DESCRIPTION, height=80)
@@ -243,7 +267,7 @@ page = st.sidebar.radio(
 )
 
 st.sidebar.divider()
-st.sidebar.caption("Open-source demo. No secrets. No direct publishing claim.")
+st.sidebar.caption("Creator workflow demo. No secrets. No direct publishing claim.")
 
 if page == "Landing":
     render_landing()
