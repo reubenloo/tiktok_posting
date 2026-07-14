@@ -1,3 +1,5 @@
 streamlit==1.59.2
 pyarrow<25.0.0
-# em-posting v0.5.1 - pin Streamlit PyArrow crash fix for Community Cloud
+pandas<3.0.0
+websockets<15.0
+# em-posting v0.5.2 - stabilize Community Cloud dataframe and websocket runtime
