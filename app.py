@@ -4,7 +4,7 @@ from textwrap import dedent
 
 import streamlit as st
 
-APP_VERSION = "v0.5.0"
+APP_VERSION = "v0.5.1"
 APP_NAME = "EM Posting"
 
 SHORT_DESCRIPTION = (

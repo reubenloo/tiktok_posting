@@ -1,2 +1,3 @@
-streamlit>=1.37.0,<1.59
-# em-posting v0.5.0 - silent demo guide, bundled sample video, and handoff receipt
+streamlit==1.59.2
+pyarrow<25.0.0
+# em-posting v0.5.1 - pin Streamlit PyArrow crash fix for Community Cloud
