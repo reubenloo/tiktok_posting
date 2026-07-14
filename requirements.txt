@@ -1,2 +1,2 @@
 streamlit>=1.37.0,<1.59
-# em-posting v0.4.0 - review-readiness polish with stable Streamlit cap
+# em-posting v0.5.0 - silent demo guide, bundled sample video, and handoff receipt

@@ -4,7 +4,7 @@ from textwrap import dedent
 
 import streamlit as st
 
-APP_VERSION = "v0.4.0"
+APP_VERSION = "v0.5.0"
 APP_NAME = "EM Posting"
 
 SHORT_DESCRIPTION = (
@@ -50,25 +50,28 @@ PRODUCTION_INTEGRATION_NOTES = dedent(
 REVIEW_READINESS_CHECKLIST = [
     "Public landing/dashboard explains the creator workflow.",
     "Terms of Service and Privacy Policy are accessible from the app navigation.",
-    "Demo Recorder gives a clear app-review video script.",
+    "Demo Guide gives a clear silent app-review video shot list.",
     "Creator Workspace shows asset selection, caption review, and consent checks.",
     "Handoff Queue shows a draft-upload style TikTok API handoff mock.",
     "TikTok Review Packet includes app description, review explanation, and scope justification.",
     "No production secrets, access tokens, private videos, cookies, or customer data are committed.",
 ]
 
-DEMO_SCRIPT = dedent(
+SILENT_DEMO_SCRIPT = dedent(
     """
-    0:00 — Open Dashboard. Say: “This is EM Posting, our creator workflow app for prepared eczema education videos.”
-    0:08 — Show the workflow cards: Prepare → Review → Handoff. Explain that every video starts as a finished MP4 from the editorial workflow.
-    0:18 — Open Demo Recorder. Click “Start guided demo” so the screen shows the recording checklist.
-    0:25 — Open Creator Workspace. Use the sample asset or upload a mock MP4. Show file metadata and the caption editor.
-    0:45 — Complete the approval checklist: approved education/founder-story content, caption reviewed, no spam, final posting remains human-reviewed.
-    1:00 — Click “Approve for TikTok draft handoff.”
-    1:08 — Open Handoff Queue. Show the approved item, account label, caption, and readiness status.
-    1:18 — Click “Send to TikTok Draft Flow (demo).” Explain that production TikTok credentials are not in this public demo.
-    1:30 — Open TikTok Review Packet. Show the short app description, review explanation, scope justification, and privacy/terms links.
-    1:45 — Close by saying: “The requested API scope is content upload/draft handoff, not direct mass publishing.”
+    0:00–0:05 — Dashboard: hold on the EM Posting hero and the Prepare → Review → Handoff cards.
+    0:05–0:10 — Demo Guide: show that this recording uses the sample asset and does not require production credentials.
+    0:10–0:25 — Creator Workspace: click Load sample asset, let the built-in sample video play, and show its file details.
+    0:25–0:40 — Review metadata: keep the default account/category/caption, tick all five approval and consent checks, then click Approve for TikTok draft handoff.
+    0:40–0:52 — Handoff Queue: show the approved item, creator consent, and the upload-to-draft endpoint mock. Click Send to TikTok Draft Flow (demo).
+    0:52–1:00 — Handoff receipt: hold on the success receipt showing demo status, creator control, and no live API call.
+    1:00–1:08 — TikTok Review Packet: briefly show video.upload, the app explanation, Terms, and Privacy links in the sidebar.
+    """
+).strip()
+
+VOICEOVER_OPTION = dedent(
+    """
+    EM Posting helps our authorized creator team review prepared eczema education videos before sending them to TikTok's draft flow. A creator selects the finished MP4, checks the caption and account, confirms consent, and approves the handoff. The requested video.upload scope reduces manual file transfer while final editing and posting remain under human control in TikTok.
     """
 ).strip()
 
@@ -167,6 +170,8 @@ if "demo_started" not in st.session_state:
     st.session_state.demo_started = False
 if "sent_count" not in st.session_state:
     st.session_state.sent_count = 0
+if "handoff_receipt" not in st.session_state:
+    st.session_state.handoff_receipt = None
 
 
 def add_event(message):
@@ -182,18 +187,21 @@ def fingerprint(uploaded_file):
 
 
 def sample_asset():
+    sample_path = Path(__file__).parent / "assets" / "sample_creator_video.mp4"
+    data = sample_path.read_bytes()
     return {
         "filename": "eczema-night-routine-founder-story.mp4",
-        "size_mb": 18.4,
-        "duration": "00:42",
-        "fingerprint": "sample-a7f42c91",
-        "source": "Sample review asset",
+        "size_mb": round(len(data) / (1024 * 1024), 2),
+        "duration": "00:08",
+        "fingerprint": hashlib.sha256(data).hexdigest()[:16],
+        "source": "Bundled public demo asset",
         "status": "Ready for approval",
+        "path": str(sample_path),
     }
 
 
 def render_version():
-    st.caption(f"{APP_VERSION} - demo-video-ready creator workflow and TikTok draft handoff mock")
+    st.caption(f"{APP_VERSION} - reviewer-ready creator workflow and TikTok draft handoff demo")
 
 
 def render_hero():
@@ -260,39 +268,61 @@ def render_dashboard():
             "Eczema Mitten / Reuben Eczema creates educational short-form content around eczema care, founder-story moments, and product education. "
             "EM Posting gives the creator team a simple review station so prepared videos are checked before they move into TikTok."
         )
-        st.markdown("## Demo-ready path")
-        st.write("For recording, go in this order: **Demo Recorder → Creator Workspace → Handoff Queue → TikTok Review Packet**.")
+        st.markdown("## Record the clean 60-second demo")
+        st.write("Use **Demo Guide → Creator Workspace → Handoff Queue → TikTok Review Packet**. Voiceover is optional; the interface and success receipt carry the story on-screen.")
+        st.info("Recommended: record the browser window only at 100% zoom, use the bundled sample video, and keep the final clip around 60–70 seconds.")
     with right:
         st.markdown("## Current demo progress")
         workflow_progress()
 
 
 def render_demo_recorder():
-    st.title("Demo Recorder")
+    st.title("Demo Guide")
     render_version()
-    st.write("Use this page while recording the TikTok app review video. It gives you a clean script, timing, and the exact order to click through.")
+    st.success("Best review video: a simple 60–70 second silent screen recording. Voiceover is optional, not required.")
 
-    col1, col2 = st.columns([0.35, 0.65])
-    with col1:
-        if st.button("Start guided demo", type="primary"):
-            st.session_state.demo_started = True
-            add_event("Started guided demo recording flow")
-        if st.button("Reset demo state"):
-            st.session_state.asset = None
-            st.session_state.queue = []
-            st.session_state.sent_count = 0
-            st.session_state.events = []
-            st.session_state.demo_started = False
-            st.success("Demo state reset.")
-        st.markdown("### Screen checklist")
-        workflow_progress()
-    with col2:
-        if st.session_state.demo_started:
-            st.success("Guided demo mode is active. Start on Dashboard, then continue through the pages below.")
-        else:
-            st.warning("Click Start guided demo before recording so the activity log captures the flow.")
-        st.text_area("Narration script", DEMO_SCRIPT, height=430)
-        st.download_button("Download demo script", DEMO_SCRIPT, file_name="em-posting-demo-script.txt")
+    top1, top2, top3 = st.columns(3)
+    top1.metric("Target length", "60–70 sec")
+    top2.metric("Demo asset", "Bundled MP4")
+    top3.metric("Live TikTok call", "No — clearly mocked")
+
+    if st.button("Prepare clean demo state", type="primary"):
+        st.session_state.asset = None
+        st.session_state.queue = []
+        st.session_state.sent_count = 0
+        st.session_state.events = []
+        st.session_state.handoff_receipt = None
+        st.session_state.demo_started = True
+        add_event("Prepared clean demo recording state")
+        st.success("Clean state ready. Start recording, open Dashboard for five seconds, then return here and follow the shot list.")
+
+    left, right = st.columns([0.62, 0.38])
+    with left:
+        st.markdown("## Silent shot list")
+        shots = [
+            ("00:00–00:05", "Dashboard", "Hold on the hero and Prepare → Review → Handoff cards."),
+            ("00:05–00:10", "Demo Guide", "Show this checklist and the no-live-credentials notice."),
+            ("00:10–00:25", "Creator Workspace", "Load the sample asset, play the preview briefly, and show file metadata."),
+            ("00:25–00:40", "Review + consent", "Tick all five checks and approve the asset for TikTok draft handoff."),
+            ("00:40–00:52", "Handoff Queue", "Show account, caption, consent, endpoint mock, then click the demo send button."),
+            ("00:52–01:00", "Success receipt", "Hold long enough for the reviewer to read creator control and no-live-call status."),
+            ("01:00–01:08", "Review Packet", "Show video.upload, review copy, Terms, and Privacy navigation."),
+        ]
+        for timing, page, action in shots:
+            st.markdown(f"**{timing} · {page}**  \n{action}")
+    with right:
+        st.markdown("## Recording rules")
+        st.checkbox("Browser window only", value=True, disabled=True)
+        st.checkbox("100% browser zoom", value=True, disabled=True)
+        st.checkbox("Use bundled sample asset", value=True, disabled=True)
+        st.checkbox("No secrets or TikTok login shown", value=True, disabled=True)
+        st.checkbox("Pause on final receipt", value=True, disabled=True)
+        st.markdown("## Optional voiceover")
+        st.text_area("One-paragraph narration", VOICEOVER_OPTION, height=180)
+
+    with st.expander("Exact timeline text"):
+        st.text(SILENT_DEMO_SCRIPT)
+        st.download_button("Download silent shot list", SILENT_DEMO_SCRIPT, file_name="em-posting-silent-demo.txt")
 
 
 def render_workspace():
@@ -313,7 +343,7 @@ def render_workspace():
         if st.button("Load asset for review", type="primary"):
             if mode == "Use sample review asset":
                 st.session_state.asset = sample_asset()
-                add_event("Loaded sample review asset")
+                add_event("Loaded bundled sample review asset")
             elif uploaded is None:
                 st.error("Upload a mock MP4 first, or use the sample asset.")
             else:
@@ -329,9 +359,11 @@ def render_workspace():
                 add_event(f"Loaded uploaded asset: {uploaded.name}")
 
         if st.session_state.asset:
+            a = st.session_state.asset
+            if a.get("path"):
+                st.video(a["path"], autoplay=True, muted=True)
             st.markdown("### Asset review card")
             with st.container(border=True):
-                a = st.session_state.asset
                 st.markdown(f"#### {a['filename']}")
                 st.write(f"**Source:** {a['source']}  |  **Size:** {a['size_mb']} MB  |  **Duration:** {a['duration']}")
                 st.write(f"**Fingerprint:** `{a['fingerprint']}`")
@@ -406,8 +438,22 @@ def render_queue():
                 if st.button("Send to TikTok Draft Flow (demo)", key=f"send_{index}"):
                     item["handoff_status"] = "Demo sent to TikTok draft flow"
                     st.session_state.sent_count += 1
+                    st.session_state.handoff_receipt = {
+                        "status": "Demo handoff complete",
+                        "destination": "TikTok draft / inbox flow",
+                        "scope": "video.upload",
+                        "creator_control": "Final editing and posting remain in TikTok",
+                        "live_api_call": "No — public review demo",
+                        "asset": item["filename"],
+                        "completed_at": datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC"),
+                    }
                     add_event(f"Demo TikTok draft handoff completed for {item['filename']}")
-                    st.success("Demo handoff complete. In production this would call TikTok's upload/draft endpoint.")
+                    st.success("Demo handoff complete. No live TikTok API call was made.")
+
+    if st.session_state.handoff_receipt:
+        st.markdown("## Handoff receipt")
+        st.success("The approved video completed the public demo handoff. The creator would finish editing and posting inside TikTok.")
+        st.json(st.session_state.handoff_receipt)
 
 
 def render_review_packet():
@@ -424,8 +470,11 @@ def render_review_packet():
 ## Scope/product justification
 {SCOPE_JUSTIFICATION}
 
-## Demo video storyboard/script
-{DEMO_SCRIPT}
+## Silent demo video shot list
+{SILENT_DEMO_SCRIPT}
+
+## Optional voiceover
+{VOICEOVER_OPTION}
 """
     st.download_button("Download review packet", packet, file_name="em-posting-tiktok-review-packet.md", mime="text/markdown")
     st.markdown("## Copy/paste fields")
@@ -474,7 +523,7 @@ def render_readiness():
         st.checkbox(item, value=True, disabled=True)
     st.divider()
     st.markdown("## Recommended recording path")
-    st.markdown("1. Dashboard → 2. Demo Recorder → 3. Creator Workspace → 4. Handoff Queue → 5. TikTok Review Packet → 6. Terms/Privacy")
+    st.markdown("1. Dashboard → 2. Demo Guide → 3. Creator Workspace → 4. Handoff Queue → 5. TikTok Review Packet → 6. Terms/Privacy")
     st.markdown("## Streamlit deploy settings")
     st.code(
         "Repository: reubenloo/tiktok_posting\n"
@@ -510,14 +559,14 @@ with st.sidebar:
     st.markdown("# 🧤 EM Posting")
     page = st.radio(
         "Navigate",
-        ["Dashboard", "Demo Recorder", "Creator Workspace", "Handoff Queue", "TikTok Review Packet", "Production Plan", "Review Readiness", "Terms", "Privacy", "Activity Log"],
+        ["Dashboard", "Demo Guide", "Creator Workspace", "Handoff Queue", "TikTok Review Packet", "Production Plan", "Review Readiness", "Terms", "Privacy", "Activity Log"],
     )
     st.divider()
     st.caption("Public review demo. Production credentials are not included.")
 
 if page == "Dashboard":
     render_dashboard()
-elif page == "Demo Recorder":
+elif page == "Demo Guide":
     render_demo_recorder()
 elif page == "Creator Workspace":
     render_workspace()
