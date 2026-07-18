@@ -5,7 +5,7 @@ from textwrap import dedent
 
 import streamlit as st
 
-APP_VERSION = "v0.8.1"
+APP_VERSION = "v0.8.2"
 APP_NAME = "EM Posting"
 TAGLINE = "One calm place to take a finished video from final cut to an approved TikTok draft."
 
@@ -526,11 +526,19 @@ def render_publish():
 def render_legal():
     page_header("Legal", "Terms & Privacy", "The policies for the EM Posting creator workflow product.")
     version_caption()
-    terms_tab, privacy_tab = st.tabs(["Terms of Service", "Privacy Policy"])
-    with terms_tab:
+    policy = st.query_params.get("policy")
+    if policy == "terms":
         st.markdown(TERMS)
-    with privacy_tab:
+        st.link_button("View Privacy Policy", f"{WEBSITE_URL}/?page=legal&policy=privacy")
+    elif policy == "privacy":
         st.markdown(PRIVACY)
+        st.link_button("View Terms of Service", f"{WEBSITE_URL}/?page=legal&policy=terms")
+    else:
+        terms_tab, privacy_tab = st.tabs(["Terms of Service", "Privacy Policy"])
+        with terms_tab:
+            st.markdown(TERMS)
+        with privacy_tab:
+            st.markdown(PRIVACY)
 
 
 # --------------------------------------------------------------------------- Shell
@@ -540,7 +548,8 @@ init_state()
 
 NAV_ITEMS = ["Home", "Studio", "Publish", "Legal"]
 if "nav" not in st.session_state:
-    st.session_state.nav = "Home"
+    requested_page = st.query_params.get("page", "home").lower()
+    st.session_state.nav = "Legal" if requested_page == "legal" else "Home"
 
 with st.sidebar:
     st.markdown('<div class="brand"><span class="brand-mark">✦</span>EM Posting</div>', unsafe_allow_html=True)

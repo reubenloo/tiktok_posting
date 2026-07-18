@@ -2,4 +2,4 @@ streamlit==1.59.2
 pyarrow<25.0.0
 pandas<3.0.0
 websockets<15.0
-# em-posting v0.8.1 - add clear post-handoff navigation (rebuild marker)
+# em-posting v0.8.2 - add direct public terms and privacy URLs (rebuild marker)
