@@ -2,4 +2,4 @@ streamlit==1.59.2
 pyarrow<25.0.0
 pandas<3.0.0
 websockets<15.0
-# em-posting v0.5.4 - execute Streamlit entrypoint on every session and repair sample asset path
+# em-posting v0.7.0 - harden creator product UX after independent review

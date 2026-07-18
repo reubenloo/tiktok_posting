@@ -1,20 +1,19 @@
 # EM Posting
 
-Creator workflow app for Eczema Mitten / Reuben Eczema TikTok developer app review.
+Creator publishing workspace for reviewing finished short-form videos and handing approved posts to TikTok drafts.
 
-EM Posting demonstrates a real review-first short-form workflow:
+EM Posting is being developed as a focused creator product, with the Eczema Mitten / Reuben Eczema team as its initial workspace. The public build demonstrates a real review-first short-form workflow:
 
-1. public creator workflow dashboard
-2. silent demo recording guide
-3. creator workspace with a bundled public sample MP4 or user-selected mock MP4
-4. caption, metadata, safety, and explicit creator-consent review
-5. handoff queue that clearly mocks TikTok upload-to-draft behavior
-6. readable success receipt confirming no live API call was made
-7. TikTok review packet, production plan, terms, and privacy pages
+1. polished creator home and studio
+2. finished-video content library
+3. caption, metadata, rights, policy, and consent review
+4. deliberate one-post-at-a-time publish queue
+5. TikTok draft handoff preview with a readable receipt
+6. activity history, connection status, terms, and privacy
 
 ## Positioning
 
-EM Posting is a creator operations app for a small authorized content team. It supports approved eczema education, founder-story, product education, and care-routine videos.
+EM Posting is a creator publishing workspace for people and small teams who already have a finished video and want a clean final review before platform handoff. The initial pilot workspace belongs to the Reuben creator team.
 
 It is not a mass publisher, engagement bot, scraper, autonomous spam tool, or direct public-posting system. The intended TikTok integration is upload/draft handoff so a human creator keeps final control in TikTok.
 
@@ -22,33 +21,32 @@ It is not a mass publisher, engagement bot, scraper, autonomous spam tool, or di
 
 ### Description under 120 chars
 
-Creator workflow for reviewing approved eczema education videos and sending them to TikTok drafts.
+Creator workspace for reviewing finished videos and sending approved posts to TikTok drafts.
 
 ### App review explanation under 1000 chars
 
-EM Posting is a creator workflow app used by the Eczema Mitten content team to prepare approved short-form educational videos and send them to TikTok for final review and posting. The workflow starts with finished MP4 videos created by our editorial process. An authorized team member opens EM Posting, selects a prepared video, reviews the caption and metadata, checks the approval steps, then uses the TikTok integration to upload the video to TikTok's posting/draft flow. The purpose of the Content Posting API integration is to reduce manual file transfer while preserving a human review step before publishing. The app is not a mass-posting platform and does not auto-generate or spam content. Access is limited to authorized creators and operators managing the Eczema Mitten / Reuben Eczema accounts.
+EM Posting is a creator workflow app for preparing finished short-form videos for TikTok. An authorized creator selects a completed MP4, reviews the account, caption, metadata, and content checks, then explicitly approves the video for TikTok's draft flow. The requested Content Posting API integration will reduce manual file transfer while preserving human review and final posting control in TikTok. The initial workspace is used by the Reuben creator team, but the product is designed as a focused creator publishing workspace rather than a mass-posting service. It does not scrape data, automate engagement, or publish spam.
 
 ## Requested TikTok product/scope
 
 - Product: Content Posting API
 - Scope: `video.upload`
-- Expected endpoint shape: `/v2/post/publish/inbox/video/init/`
-- Intended result: upload to TikTok draft/inbox flow for final creator editing and posting
+- Planned production endpoint: `/v2/post/publish/inbox/video/init/`
+- Intended result after approval and OAuth configuration: upload to TikTok draft/inbox flow for final creator editing and posting
 
 EM Posting does not need follower data, analytics, direct messages, comments, or broad account management permissions.
 
 ## Recommended demo recording
 
-A simple **silent 60–70 second screen recording** is enough. Voiceover is optional.
+A concise **spoken 75–90 second walkthrough** is recommended. A silent version also works.
 
-1. Dashboard — hold on the app positioning and Prepare → Review → Handoff cards.
-2. Demo Guide — show the silent shot list and no-live-credentials notice.
-3. Creator Workspace — load the bundled sample asset and briefly play its preview.
-4. Keep the default metadata, tick all five review/consent checks, and approve it.
-5. Handoff Queue — show the approved asset, creator consent, and endpoint mock.
-6. Click **Send to TikTok Draft Flow (demo)**.
-7. Hold on the success receipt showing creator control and that no live API call occurred.
-8. TikTok Review Packet — briefly show `video.upload`, Terms, and Privacy.
+1. Home — establish EM Posting as a creator workspace.
+2. Studio — choose the bundled library video and review its post details.
+3. Complete all final checks and click **Approve for publishing**.
+4. Publish — show the approved post and click **Send to TikTok drafts**.
+5. Hold on the handoff receipt showing creator control and preview status.
+6. Connections — show the TikTok approval state.
+7. Briefly show Terms and Privacy in the navigation.
 
 Recording rules:
 

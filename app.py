@@ -1,78 +1,32 @@
 import hashlib
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 from textwrap import dedent
 
 import streamlit as st
 
-APP_VERSION = "v0.5.4"
+APP_VERSION = "v0.7.0"
 APP_NAME = "EM Posting"
+TAGLINE = "From final cut to creator-ready draft."
 
-SHORT_DESCRIPTION = (
-    "Creator workflow for reviewing approved eczema education videos and sending them to TikTok drafts."
-)
+SHORT_DESCRIPTION = "Creator workspace for reviewing finished videos and sending approved posts to TikTok drafts."
 
 APP_REVIEW_EXPLANATION = (
-    "EM Posting is a creator workflow app used by the Eczema Mitten content team to prepare approved short-form "
-    "educational videos and send them to TikTok for final review and posting. The workflow starts with finished MP4 "
-    "videos created by our editorial process. An authorized team member opens EM Posting, selects a prepared video, "
-    "reviews the caption and metadata, checks the approval steps, then uses the TikTok integration to upload the video "
-    "to TikTok's posting/draft flow. The purpose of the Content Posting API integration is to reduce manual file "
-    "transfer while preserving a human review step before publishing. The app is not a mass-posting platform and does "
-    "not auto-generate or spam content. Access is limited to authorized creators and operators managing the Eczema "
-    "Mitten / Reuben Eczema accounts."
+    "EM Posting is a creator workflow app for preparing finished short-form videos for TikTok. "
+    "An authorized creator selects a completed MP4, reviews the account, caption, metadata, and content checks, "
+    "then explicitly approves the video for TikTok's draft flow. The requested Content Posting API integration "
+    "reduces manual file transfer while preserving human review and final posting control in TikTok. The initial "
+    "workspace is used by the Eczema Mitten / Reuben Eczema creator team, but the product is designed as a focused "
+    "creator publishing workspace rather than a mass-posting service. It does not scrape data, automate engagement, "
+    "or publish spam."
 )
 
 SCOPE_JUSTIFICATION = dedent(
     """
-    Requested TikTok product/scope: Content Posting API, preferably video.upload / upload-to-draft flow.
+    Requested product: TikTok Content Posting API
+    Requested scope: video.upload
 
-    EM Posting only needs permission to upload a prepared MP4 and associated caption/metadata into TikTok's posting or draft workflow for final human review. The app does not need follower data, analytics, direct messages, comments, or broad account management permissions.
-
-    The integration is used by authorized creators to move approved eczema education and founder-story videos from our editorial workflow into TikTok without manual file transfer. A team member reviews the video and caption before sending it to TikTok, and final posting remains under human control.
-    """
-).strip()
-
-
-PRODUCTION_INTEGRATION_NOTES = dedent(
-    """
-    Planned production integration:
-
-    - Product: TikTok Content Posting API.
-    - Preferred scope: video.upload, because EM Posting is designed for upload-to-draft / inbox handoff rather than automatic public publishing.
-    - Expected endpoint: /v2/post/publish/inbox/video/init/.
-    - Transfer method: FILE_UPLOAD for a creator-selected local MP4. PULL_FROM_URL should only be used later if the production video host/domain is verified in TikTok developer settings.
-    - Creator control: after upload, the TikTok creator receives an inbox notification and completes final editing/posting in TikTok.
-    - Rate/spam posture: the app is intentionally narrow and review-gated. It is not a bulk scheduler, scraper, engagement bot, or mass publisher.
-    - Secrets: OAuth credentials and access tokens must be stored in Streamlit secrets or another private production secret store, never in this public repository.
-    """
-).strip()
-
-REVIEW_READINESS_CHECKLIST = [
-    "Public landing/dashboard explains the creator workflow.",
-    "Terms of Service and Privacy Policy are accessible from the app navigation.",
-    "Demo Guide gives a clear silent app-review video shot list.",
-    "Creator Workspace shows asset selection, caption review, and consent checks.",
-    "Handoff Queue shows a draft-upload style TikTok API handoff mock.",
-    "TikTok Review Packet includes app description, review explanation, and scope justification.",
-    "No production secrets, access tokens, private videos, cookies, or customer data are committed.",
-]
-
-SILENT_DEMO_SCRIPT = dedent(
-    """
-    0:00–0:05 — Dashboard: hold on the EM Posting hero and the Prepare → Review → Handoff cards.
-    0:05–0:10 — Demo Guide: show that this recording uses the sample asset and does not require production credentials.
-    0:10–0:25 — Creator Workspace: click Load sample asset, let the built-in sample video play, and show its file details.
-    0:25–0:40 — Review metadata: keep the default account/category/caption, tick all five approval and consent checks, then click Approve for TikTok draft handoff.
-    0:40–0:52 — Handoff Queue: show the approved item, creator consent, and the upload-to-draft endpoint mock. Click Send to TikTok Draft Flow (demo).
-    0:52–1:00 — Handoff receipt: hold on the success receipt showing demo status, creator control, and no live API call.
-    1:00–1:08 — TikTok Review Packet: briefly show video.upload, the app explanation, Terms, and Privacy links in the sidebar.
-    """
-).strip()
-
-VOICEOVER_OPTION = dedent(
-    """
-    EM Posting helps our authorized creator team review prepared eczema education videos before sending them to TikTok's draft flow. A creator selects the finished MP4, checks the caption and account, confirms consent, and approves the handoff. The requested video.upload scope reduces manual file transfer while final editing and posting remain under human control in TikTok.
+    EM Posting needs video.upload to transfer one creator-approved MP4 and its reviewed metadata into TikTok's draft/inbox workflow. The creator deliberately initiates each handoff and completes final editing and posting in TikTok. The app does not need follower lists, analytics, comments, direct messages, engagement automation, or broad account-management permissions.
     """
 ).strip()
 
@@ -80,27 +34,27 @@ TERMS = dedent(
     """
     # Terms of Service
 
-    Last updated: July 2026
+    **Last updated: July 2026**
 
-    EM Posting is a creator workflow app for authorized Eczema Mitten / Reuben Eczema team members. By using this app, you agree to use it only for approved short-form educational, founder-story, and ecommerce-related content managed by the team.
+    EM Posting is a creator workflow product for preparing, reviewing, and handing approved short-form videos to supported social platforms.
 
-    ## Authorized use
-    Access is limited to approved creators and operators. Users may review prepared videos, captions, metadata, and upload handoff steps connected to the team's social posting workflow.
+    ## Account and workspace use
+    You may use EM Posting only for workspaces and creator accounts you are authorized to manage. You are responsible for the videos, captions, metadata, approvals, and account selections made in your workspace.
 
-    ## Human review
-    Videos must be reviewed by an authorized team member before being sent to TikTok's upload, draft, or posting workflow. EM Posting is not intended for spam, mass publishing, deceptive automation, or bypassing platform review controls.
+    ## Creator approval
+    EM Posting is designed around deliberate human review. A creator or authorized team member must review each post before initiating a platform handoff. The service may not be used for spam, deceptive automation, unauthorized account access, or attempts to bypass platform controls.
 
-    ## User responsibilities
-    Users are responsible for ensuring that content is accurate, lawful, brand-safe, and compliant with TikTok's policies and all applicable platform rules.
+    ## Platform services
+    Platform integrations remain subject to each platform's terms, permissions, technical limits, and review requirements. A successful handoff does not guarantee publication. Final editing and posting may continue inside the destination platform.
 
-    ## No sensitive data in demos
-    Public demos and open-source code must not contain production secrets, access tokens, private customer data, or unpublished confidential business information.
+    ## Content rights
+    You must have the rights and permissions required to upload and publish the content you submit.
 
-    ## Changes
-    We may update these terms as the workflow and TikTok integration mature.
+    ## Availability
+    Features may change as integrations mature. Preview features are identified in the interface and must not be represented as completed production integrations.
 
     ## Contact
-    Contact the Eczema Mitten team through the official business channels connected to the Eczema Mitten / Reuben Eczema accounts.
+    Product and policy questions may be sent to eczemamitten@gmail.com while EM Posting is in its initial creator pilot.
     """
 ).strip()
 
@@ -108,78 +62,106 @@ PRIVACY = dedent(
     """
     # Privacy Policy
 
-    Last updated: July 2026
+    **Last updated: July 2026**
 
-    EM Posting is a creator workflow app for authorized Eczema Mitten / Reuben Eczema team members.
+    EM Posting is a creator workflow product. This policy describes the information the service may process to prepare and hand creator-approved posts to supported platforms.
 
     ## Information processed
-    The app may process prepared MP4 videos, captions, account labels, internal approval status, and basic technical metadata such as filename, file size, and upload time.
+    EM Posting may process creator account labels, finished video files, captions, hashtags, content categories, approval choices, file metadata, and workflow activity such as review and handoff timestamps.
 
-    ## Purpose
-    This information is used to help authorized creators review approved eczema education and founder-story videos before sending them to TikTok's upload, draft, or posting workflow.
+    ## How information is used
+    This information is used to display the creator workspace, preserve review decisions, prepare platform handoffs, and show workflow receipts to authorized users.
 
-    ## TikTok data
-    The requested TikTok integration is limited to content posting/upload functionality. EM Posting does not request direct messages, comments, follower lists, or unrelated TikTok account data.
+    ## Platform data
+    The requested TikTok integration is limited to content upload functionality. EM Posting does not request TikTok direct messages, comments, follower lists, or unrelated account data.
 
     ## Storage
-    This demo app does not permanently store uploaded files. A production deployment may temporarily process files only as needed to support the upload workflow.
+    The public review build uses session-only state and does not permanently store uploaded videos. A production service may temporarily process files and retain workflow records only as needed to provide the creator-requested service.
 
     ## Sharing
-    Content is shared with TikTok only when an authorized team member chooses to send an approved video through the TikTok integration. We do not sell personal information.
+    Content is sent to a platform only after an authorized creator initiates the handoff. EM Posting does not sell personal information.
 
     ## Security
-    Production API credentials must be stored in secure deployment secrets, never in the public repository.
+    Production credentials and access tokens must be stored in private deployment secrets and are never included in the public source repository.
 
     ## Contact
-    Contact the Eczema Mitten team through official business channels for privacy questions.
+    Privacy questions may be sent to eczemamitten@gmail.com during the initial pilot.
     """
 ).strip()
 
-st.set_page_config(page_title=APP_NAME, page_icon="🧤", layout="wide")
+st.set_page_config(page_title=APP_NAME, page_icon="✦", layout="wide", initial_sidebar_state="expanded")
 
 st.markdown(
     """
     <style>
-    .stApp { background: linear-gradient(135deg, #fbf7ef 0%, #f5ead8 45%, #eaf1ec 100%); }
-    section[data-testid="stSidebar"] { background: #111827; }
-    section[data-testid="stSidebar"] * { color: #f9fafb !important; }
-    .hero-card { padding: 2.4rem; border-radius: 28px; background: radial-gradient(circle at top right, #3b6b50 0%, #111827 48%, #0b111c 100%); color: white; box-shadow: 0 20px 60px rgba(17,24,39,.22); }
-    .hero-card h1 { font-size: 3.7rem; line-height: .95; margin: .4rem 0 .8rem; color: white; letter-spacing: -0.06em; }
-    .hero-card p { font-size: 1.08rem; color: #e5e7eb; max-width: 880px; }
-    .pill { display: inline-block; padding: .38rem .72rem; border-radius: 999px; background: rgba(255,255,255,.13); margin: .15rem; font-size: .84rem; border: 1px solid rgba(255,255,255,.16); }
-    .panel { background: rgba(255,255,255,.88); border: 1px solid rgba(17,24,39,.08); border-radius: 22px; padding: 1.2rem; box-shadow: 0 9px 26px rgba(17,24,39,.07); min-height: 150px; }
-    .panel h3 { margin-top: 0; letter-spacing: -0.03em; }
-    .metric-card { background: #ffffff; border-radius: 18px; padding: 1rem; border-left: 5px solid #315c45; box-shadow: 0 7px 20px rgba(17,24,39,.07); min-height: 86px; }
-    .step { padding: .9rem 1rem; border-radius: 16px; background: white; border: 1px solid rgba(17,24,39,.08); margin-bottom: .55rem; }
-    .step-ready { border-left: 6px solid #047857; }
-    .step-wait { border-left: 6px solid #d97706; }
-    .status-ready { color: #065f46; font-weight: 800; }
-    .status-waiting { color: #92400e; font-weight: 800; }
-    .muted { color: #6b7280; font-size: .92rem; }
+    :root { --ink:#171a22; --muted:#6e7280; --line:#e6e5e1; --paper:#f7f7f4; --card:#ffffff; --violet:#7057ff; --violet2:#9c7cff; --green:#167c5a; }
+    .stApp { background: var(--paper); color: var(--ink); }
+    .block-container { max-width: 1240px; padding-top: 2.2rem; padding-bottom: 4rem; }
+    section[data-testid="stSidebar"] { background: #111218; border-right: 1px solid rgba(255,255,255,.08); }
+    section[data-testid="stSidebar"] [data-testid="stMarkdownContainer"] p,
+    section[data-testid="stSidebar"] [data-testid="stMarkdownContainer"] h1,
+    section[data-testid="stSidebar"] [data-testid="stMarkdownContainer"] h2,
+    section[data-testid="stSidebar"] [data-testid="stCaptionContainer"] { color: #f5f4ff !important; }
+    section[data-testid="stSidebar"] label { color: #efeff5 !important; }
+    section[data-testid="stSidebar"] [role="radiogroup"] label { padding: .34rem .45rem; border-radius: 10px; }
+    h1, h2, h3 { letter-spacing: -.035em; }
+    h1 { font-size: 2.55rem !important; }
+    .brand { font-size:1.18rem; font-weight:850; letter-spacing:-.04em; color:white; }
+    .brand-mark { display:inline-grid; place-items:center; width:29px; height:29px; margin-right:8px; border-radius:9px; background:linear-gradient(135deg,#7057ff,#ba76ff); color:white; }
+    .workspace-chip { margin-top:.75rem; padding:.72rem .8rem; border:1px solid rgba(255,255,255,.12); background:rgba(255,255,255,.06); border-radius:12px; color:#efeff5; font-size:.83rem; }
+    .eyebrow { text-transform:uppercase; letter-spacing:.16em; font-size:.7rem; font-weight:800; color:#7057ff; margin-bottom:.65rem; }
+    .hero { padding:2.35rem 2.45rem; border-radius:26px; color:white; background:radial-gradient(circle at 80% 10%,rgba(183,132,255,.52),transparent 35%),linear-gradient(135deg,#171825 0%,#31275c 58%,#7057ff 100%); box-shadow:0 28px 70px rgba(48,36,105,.18); overflow:hidden; }
+    .hero h1 { color:white; font-size:3.35rem !important; line-height:1.01; max-width:760px; margin:.2rem 0 .85rem; }
+    .hero p { color:#e9e6ff; font-size:1.08rem; line-height:1.65; max-width:760px; }
+    .hero-badge { display:inline-block; padding:.4rem .7rem; border:1px solid rgba(255,255,255,.18); background:rgba(255,255,255,.1); border-radius:999px; font-size:.76rem; margin-right:.35rem; }
+    .card { background:var(--card); border:1px solid var(--line); border-radius:18px; padding:1.2rem 1.25rem; box-shadow:0 10px 28px rgba(24,23,34,.045); height:100%; }
+    .card h3 { margin:.1rem 0 .4rem; font-size:1.08rem; }
+    .card p { color:var(--muted); font-size:.91rem; line-height:1.55; }
+    .stat { background:white; border:1px solid var(--line); border-radius:16px; padding:1rem 1.1rem; min-height:102px; }
+    .stat-label { color:var(--muted); font-size:.72rem; text-transform:uppercase; letter-spacing:.1em; font-weight:750; }
+    .stat-value { font-size:1.48rem; font-weight:850; margin-top:.35rem; letter-spacing:-.04em; }
+    .status { display:inline-flex; align-items:center; gap:.38rem; font-size:.76rem; font-weight:750; border-radius:999px; padding:.33rem .58rem; }
+    .status-ready { color:#116247; background:#e7f6ef; }
+    .status-preview { color:#665114; background:#fff4cf; }
+    .status-neutral { color:#555969; background:#eff0f3; }
+    .flow { display:flex; align-items:center; gap:.65rem; flex-wrap:wrap; margin:.7rem 0 1rem; }
+    .flow-node { padding:.6rem .78rem; border-radius:12px; border:1px solid var(--line); background:white; font-size:.82rem; font-weight:760; }
+    .flow-arrow { color:#9b9da7; font-weight:800; }
+    .video-shell { padding:.75rem; background:#12131a; border-radius:20px; border:1px solid #292b35; }
+    .receipt { padding:1.2rem; border-radius:16px; border:1px solid #bde5d4; background:linear-gradient(135deg,#edfbf5,#f9fffc); }
+    .small-note { color:var(--muted); font-size:.82rem; }
+    [data-testid="stForm"] { background:white; border:1px solid var(--line); border-radius:18px; padding:1.2rem; }
+    div[data-testid="stButton"] > button[kind="primary"], div[data-testid="stFormSubmitButton"] > button[kind="primary"] { background:linear-gradient(135deg,#6550ee,#8a62ff); border:none; }
+    div[data-testid="stButton"] > button, div[data-testid="stDownloadButton"] > button { border-radius:11px; min-height:2.65rem; font-weight:700; }
+    [data-testid="stFileUploader"] { background:#fbfbfa; border-radius:14px; padding:.35rem; }
+    footer { visibility:hidden; }
     </style>
     """,
     unsafe_allow_html=True,
 )
 
-if "events" not in st.session_state:
-    st.session_state.events = []
-if "asset" not in st.session_state:
-    st.session_state.asset = None
-if "queue" not in st.session_state:
-    st.session_state.queue = []
-if "demo_started" not in st.session_state:
-    st.session_state.demo_started = False
-if "sent_count" not in st.session_state:
-    st.session_state.sent_count = 0
-if "handoff_receipt" not in st.session_state:
-    st.session_state.handoff_receipt = None
+
+def utc_now():
+    return datetime.now(UTC).strftime("%Y-%m-%d %H:%M:%S UTC")
 
 
-def add_event(message):
-    st.session_state.events.insert(0, {
-        "time": datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC"),
-        "event": message,
-    })
+def init_state():
+    defaults = {
+        "asset": None,
+        "queue": [],
+        "events": [],
+        "handoff_receipt": None,
+        "sent_count": 0,
+        "workspace": "Reuben Creator Studio",
+        "review_started": False,
+    }
+    for key, value in defaults.items():
+        if key not in st.session_state:
+            st.session_state[key] = value
+
+
+def add_event(action, detail, status="Complete"):
+    st.session_state.events.insert(0, {"Time": utc_now(), "Action": action, "Detail": detail, "Status": status})
 
 
 def fingerprint(uploaded_file):
@@ -191,397 +173,372 @@ def sample_asset():
     sample_path = Path(__file__).parent / "assets" / "sample_creator_video.mp4"
     data = sample_path.read_bytes()
     return {
-        "filename": "eczema-night-routine-founder-story.mp4",
+        "filename": "founder-night-routine.mp4",
+        "title": "A founder's night routine",
         "size_mb": round(len(data) / (1024 * 1024), 2),
         "duration": "00:08",
         "fingerprint": hashlib.sha256(data).hexdigest()[:16],
-        "source": "Bundled public demo asset",
-        "status": "Ready for approval",
+        "source": "Creator library",
+        "status": "Ready for review",
         "path": str(sample_path),
     }
 
 
-def render_version():
-    st.caption(f"{APP_VERSION} - reviewer-ready creator workflow and TikTok draft handoff demo")
+def version_caption():
+    st.caption(f"{APP_VERSION} · creator publishing workspace")
 
 
-def render_hero():
+def page_header(eyebrow, title, subtitle):
+    st.markdown(f'<div class="eyebrow">{eyebrow}</div>', unsafe_allow_html=True)
+    st.title(title)
+    st.write(subtitle)
+    version_caption()
+
+
+def progress_strip():
+    has_asset = st.session_state.asset is not None
+    reviewed = st.session_state.review_started or bool(st.session_state.queue)
+    approved = bool(st.session_state.queue)
+    sent = st.session_state.sent_count > 0
+    stages = [("1", "Select", has_asset), ("2", "Review", reviewed), ("3", "Approve", approved), ("4", "Send", sent)]
+    html = '<div class="flow">'
+    for index, (number, label, done) in enumerate(stages):
+        status = "✓" if done else number
+        html += f'<span class="flow-node">{status} &nbsp; {label}</span>'
+        if index < len(stages) - 1:
+            html += '<span class="flow-arrow">→</span>'
+    html += "</div>"
+    st.markdown(html, unsafe_allow_html=True)
+
+
+def render_home():
     st.markdown(
         """
-        <div class="hero-card">
-            <div class="pill">creator operations</div>
-            <div class="pill">human review</div>
-            <div class="pill">TikTok draft handoff</div>
-            <div class="pill">prepared MP4 workflow</div>
-            <h1>EM Posting</h1>
-            <p>A creator workflow app for reviewing approved eczema education videos before sending them into TikTok's upload or draft flow.</p>
-            <p>Built for a small authorized content team: select the prepared video, confirm the story and caption, complete the approval checks, then queue a draft-style TikTok handoff. No mass publishing, no hidden credentials, no autoposting theater.</p>
+        <div class="hero">
+          <span class="hero-badge">creator workspace</span><span class="hero-badge">review-first publishing</span>
+          <h1>Ship the post.<br>Keep the final say.</h1>
+          <p>EM Posting gives creators one calm place to review finished videos, lock the caption, confirm the destination, and hand an approved post to TikTok drafts.</p>
         </div>
         """,
         unsafe_allow_html=True,
     )
-
-
-def workflow_progress():
-    has_asset = st.session_state.asset is not None
-    has_queue = len(st.session_state.queue) > 0
-    has_sent = st.session_state.sent_count > 0
-    steps = [
-        ("asset selected", has_asset),
-        ("caption reviewed", has_queue),
-        ("approved for handoff", has_queue),
-        ("draft handoff demo sent", has_sent),
-    ]
-    for label, done in steps:
-        klass = "step step-ready" if done else "step step-wait"
-        icon = "✅" if done else "⏳"
-        st.markdown(f'<div class="{klass}">{icon} <b>{label}</b></div>', unsafe_allow_html=True)
-
-
-def render_dashboard():
-    render_hero()
-    render_version()
+    version_caption()
     st.write("")
+    a, b, c, d = st.columns(4)
+    stats = [
+        (a, "Workspace", st.session_state.workspace),
+        (b, "Ready to review", "1 video" if not st.session_state.asset else "Active"),
+        (c, "Approved queue", str(len(st.session_state.queue))),
+        (d, "TikTok connection", "Preview mode"),
+    ]
+    for col, label, value in stats:
+        with col:
+            st.markdown(f'<div class="stat"><div class="stat-label">{label}</div><div class="stat-value">{value}</div></div>', unsafe_allow_html=True)
 
-    col1, col2, col3, col4 = st.columns(4)
-    with col1:
-        st.markdown('<div class="metric-card"><b>workflow</b><br><span class="status-ready">review-first</span></div>', unsafe_allow_html=True)
-    with col2:
-        st.markdown('<div class="metric-card"><b>posting mode</b><br><span class="status-ready">draft handoff</span></div>', unsafe_allow_html=True)
-    with col3:
-        st.markdown('<div class="metric-card"><b>users</b><br>authorized creators</div>', unsafe_allow_html=True)
-    with col4:
-        st.markdown('<div class="metric-card"><b>requested API</b><br>Content Posting / video.upload</div>', unsafe_allow_html=True)
-
-    st.markdown("## Product walkthrough")
-    c1, c2, c3 = st.columns(3)
-    with c1:
-        st.markdown('<div class="panel"><h3>1. prepare</h3><p>Select a finished MP4 from the editorial workflow. The app creates a clean review card with file metadata.</p></div>', unsafe_allow_html=True)
-    with c2:
-        st.markdown('<div class="panel"><h3>2. review</h3><p>Choose the account, content category, caption, and safety approvals before anything leaves the workspace.</p></div>', unsafe_allow_html=True)
-    with c3:
-        st.markdown('<div class="panel"><h3>3. handoff</h3><p>Queue the video for TikTok draft upload. The public demo simulates the API action without storing credentials.</p></div>', unsafe_allow_html=True)
-
-    left, right = st.columns([0.62, 0.38])
+    st.markdown("## Today in your studio")
+    left, right = st.columns([1.35, .65])
     with left:
-        st.markdown("## Why this exists")
-        st.write(
-            "Eczema Mitten / Reuben Eczema creates educational short-form content around eczema care, founder-story moments, and product education. "
-            "EM Posting gives the creator team a simple review station so prepared videos are checked before they move into TikTok."
+        st.markdown(
+            """
+            <div class="card">
+              <span class="status status-ready">● Ready for review</span>
+              <h3>A founder's night routine</h3>
+              <p>Founder story · 00:08 · vertical MP4<br>Final cut is waiting for caption and destination review.</p>
+            </div>
+            """,
+            unsafe_allow_html=True,
         )
-        st.markdown("## Record the clean 60-second demo")
-        st.write("Use **Demo Guide → Creator Workspace → Handoff Queue → TikTok Review Packet**. Voiceover is optional; the interface and success receipt carry the story on-screen.")
-        st.info("Recommended: record the browser window only at 100% zoom, use the bundled sample video, and keep the final clip around 60–70 seconds.")
+        st.write("")
+        st.button("Open in Studio", type="primary", use_container_width=True, on_click=lambda: st.session_state.update(nav="Studio"))
     with right:
-        st.markdown("## Current demo progress")
-        workflow_progress()
+        st.markdown(
+            """
+            <div class="card">
+              <span class="status status-preview">● Connection preview</span>
+              <h3>TikTok</h3>
+              <p>Draft handoff is designed for human final review. Production OAuth will be configured after platform approval.</p>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+    st.markdown("## A publishing flow built around creator control")
+    x, y, z = st.columns(3)
+    for col, icon, title, copy in [
+        (x, "01", "Bring the final cut", "Choose a finished MP4 from your creator library or upload one directly."),
+        (y, "02", "Review the post", "Lock the account, caption, hashtags, category, and content confirmations."),
+        (z, "03", "Send to drafts", "Initiate a single approved handoff, then finish editing and posting in TikTok."),
+    ]:
+        with col:
+            st.markdown(f'<div class="card"><div class="eyebrow">{icon}</div><h3>{title}</h3><p>{copy}</p></div>', unsafe_allow_html=True)
 
 
-def render_demo_recorder():
-    st.title("Demo Guide")
-    render_version()
-    st.success("Best review video: a simple 60–70 second silent screen recording. Voiceover is optional, not required.")
+def render_studio():
+    page_header("Create", "Publishing Studio", "Prepare one finished short-form video for a deliberate, creator-approved platform handoff.")
+    progress_strip()
 
-    top1, top2, top3 = st.columns(3)
-    top1.metric("Target length", "60–70 sec")
-    top2.metric("Demo asset", "Bundled MP4")
-    top3.metric("Live TikTok call", "No — clearly mocked")
-
-    if st.button("Prepare clean demo state", type="primary"):
-        st.session_state.asset = None
-        st.session_state.queue = []
-        st.session_state.sent_count = 0
-        st.session_state.events = []
-        st.session_state.handoff_receipt = None
-        st.session_state.demo_started = True
-        add_event("Prepared clean demo recording state")
-        st.success("Clean state ready. Start recording, open Dashboard for five seconds, then return here and follow the shot list.")
-
-    left, right = st.columns([0.62, 0.38])
+    left, right = st.columns([1.02, .98], gap="large")
     with left:
-        st.markdown("## Silent shot list")
-        shots = [
-            ("00:00–00:05", "Dashboard", "Hold on the hero and Prepare → Review → Handoff cards."),
-            ("00:05–00:10", "Demo Guide", "Show this checklist and the no-live-credentials notice."),
-            ("00:10–00:25", "Creator Workspace", "Load the sample asset, play the preview briefly, and show file metadata."),
-            ("00:25–00:40", "Review + consent", "Tick all five checks and approve the asset for TikTok draft handoff."),
-            ("00:40–00:52", "Handoff Queue", "Show account, caption, consent, endpoint mock, then click the demo send button."),
-            ("00:52–01:00", "Success receipt", "Hold long enough for the reviewer to read creator control and no-live-call status."),
-            ("01:00–01:08", "Review Packet", "Show video.upload, review copy, Terms, and Privacy navigation."),
-        ]
-        for timing, page, action in shots:
-            st.markdown(f"**{timing} · {page}**  \n{action}")
-    with right:
-        st.markdown("## Recording rules")
-        st.checkbox("Browser window only", value=True, disabled=True)
-        st.checkbox("100% browser zoom", value=True, disabled=True)
-        st.checkbox("Use bundled sample asset", value=True, disabled=True)
-        st.checkbox("No secrets or TikTok login shown", value=True, disabled=True)
-        st.checkbox("Pause on final receipt", value=True, disabled=True)
-        st.markdown("## Optional voiceover")
-        st.text_area("One-paragraph narration", VOICEOVER_OPTION, height=180)
-
-    with st.expander("Exact timeline text"):
-        st.text(SILENT_DEMO_SCRIPT)
-        st.download_button("Download silent shot list", SILENT_DEMO_SCRIPT, file_name="em-posting-silent-demo.txt")
-
-
-def render_workspace():
-    st.title("Creator Workspace")
-    render_version()
-    st.info("Functional mock for app review: you can use the sample asset or upload a mock MP4. The final TikTok API call is disabled until approval and secure credentials are configured.")
-
-    left, right = st.columns([1.05, 0.95])
-    with left:
-        st.subheader("1. Select prepared video")
-        mode = st.radio("Asset source", ["Use sample review asset", "Upload mock MP4"], horizontal=True)
+        st.markdown("### Video")
+        source = st.segmented_control("Source", ["Creator library", "Upload MP4"], default="Creator library")
         uploaded = None
-        if mode == "Upload mock MP4":
-            uploaded = st.file_uploader("Prepared MP4", type=["mp4"])
+        if source == "Upload MP4":
+            uploaded = st.file_uploader("Choose a finished vertical video", type=["mp4"], help="MP4 only. The public build keeps uploads in session memory.")
             if uploaded:
                 st.video(uploaded)
-
-        if st.button("Load asset for review", type="primary"):
-            if mode == "Use sample review asset":
+        if st.button("Use this video", type="primary", use_container_width=True):
+            if source == "Creator library":
                 st.session_state.asset = sample_asset()
-                add_event("Loaded bundled sample review asset")
+                st.session_state.review_started = True
+                add_event("Video selected", "A founder's night routine")
             elif uploaded is None:
-                st.error("Upload a mock MP4 first, or use the sample asset.")
+                st.error("Choose an MP4 first.")
             else:
                 digest, size = fingerprint(uploaded)
                 st.session_state.asset = {
                     "filename": uploaded.name,
+                    "title": Path(uploaded.name).stem.replace("-", " ").replace("_", " ").title(),
                     "size_mb": round(size / (1024 * 1024), 2),
-                    "duration": "uploaded file",
+                    "duration": None,
                     "fingerprint": digest,
-                    "source": "Uploaded demo file",
-                    "status": "Ready for approval",
+                    "source": "Direct upload",
+                    "status": "Ready for review",
+                    "video_data": uploaded.getvalue(),
                 }
-                add_event(f"Loaded uploaded asset: {uploaded.name}")
+                st.session_state.review_started = True
+                add_event("Video uploaded", uploaded.name)
 
         if st.session_state.asset:
-            a = st.session_state.asset
-            if a.get("path"):
-                st.video(a["path"], autoplay=True, muted=True)
-            st.markdown("### Asset review card")
-            with st.container(border=True):
-                st.markdown(f"#### {a['filename']}")
-                st.write(f"**Source:** {a['source']}  |  **Size:** {a['size_mb']} MB  |  **Duration:** {a['duration']}")
-                st.write(f"**Fingerprint:** `{a['fingerprint']}`")
-                st.markdown(f"<span class='status-ready'>{a['status']}</span>", unsafe_allow_html=True)
+            asset = st.session_state.asset
+            st.write("")
+            if asset.get("path"):
+                st.video(asset["path"], autoplay=True, muted=True)
+            elif asset.get("video_data"):
+                st.video(asset["video_data"])
+            duration_copy = f" · {asset['duration']}" if asset.get("duration") else ""
+            st.markdown(
+                f"""
+                <div class="card">
+                  <span class="status status-ready">● {asset['status']}</span>
+                  <h3>{asset['title']}</h3>
+                  <p>{asset['filename']}{duration_copy} · {asset['size_mb']} MB<br>Asset ID <code>{asset['fingerprint']}</code></p>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
         else:
-            st.markdown("### Asset review card")
-            st.markdown("<div class='panel'><h3>No asset loaded yet</h3><p>Use the sample asset for a clean demo recording, or upload a mock MP4 if you want to show the file picker.</p></div>", unsafe_allow_html=True)
+            st.markdown('<div class="card"><span class="status status-neutral">No video selected</span><h3>Start with a finished cut</h3><p>Select the sample from the creator library for the review walkthrough, or upload your own MP4.</p></div>', unsafe_allow_html=True)
 
     with right:
-        st.subheader("2. Review metadata")
-        account = st.selectbox("TikTok account label", ["Reuben Eczema", "Eczema Mitten SG", "Eczema Mitten US"])
-        category = st.selectbox("Content category", ["Eczema education", "Founder story", "Product education", "Care routine"])
-        caption = st.text_area(
-            "Caption",
-            "Night routine for eczema flare protection. Reviewed by the Eczema Mitten creator team before TikTok draft handoff.",
-            height=125,
-        )
-        hashtags = st.text_input("Hashtags", "#eczema #eczemacare #sensitiveskin #eczemamitten")
-        st.subheader("3. Approval checklist")
-        approved = st.checkbox("Content is approved eczema education / founder-story material")
-        reviewed = st.checkbox("Caption, hashtags, and account label reviewed")
-        safe = st.checkbox("No spam, deception, or mass-publishing behavior")
-        human = st.checkbox("Final TikTok posting remains human-reviewed")
-        consent = st.checkbox("Creator expressly consents to send this approved video to TikTok draft flow")
+        st.markdown("### Post details")
+        with st.form("post_review"):
+            title = st.text_input("Internal title", "A founder's night routine")
+            account = st.selectbox("Publish as", ["Reuben Creator", "Studio Brand", "Personal Creator"])
+            category = st.selectbox("Content category", ["Founder story", "Education", "Product story", "Routine", "Community"])
+            caption = st.text_area("Caption", "The night routine that helped me turn a difficult season into a repeatable system. Sharing what finally made the evenings feel manageable.", height=130)
+            hashtags = st.text_input("Hashtags", "#founderstory #creatordiary #nighttimeroutine")
+            st.markdown("#### Final checks")
+            rights = st.checkbox("I have the rights and permission to publish this video")
+            metadata = st.checkbox("I reviewed the account, caption, and hashtags")
+            policy = st.checkbox("This post follows TikTok and workspace content policies")
+            control = st.checkbox("I understand final editing and posting continue in TikTok")
+            consent = st.checkbox("I approve sending this video to TikTok drafts")
+            submitted = st.form_submit_button("Approve for publishing", type="primary", use_container_width=True)
 
-        if st.button("Approve for TikTok draft handoff"):
+        if submitted:
             if not st.session_state.asset:
-                st.error("Load an asset first.")
-            elif not all([approved, reviewed, safe, human, consent]):
-                st.error("Complete all approval checks before queueing.")
+                st.error("Select a video before approving the post.")
+            elif not all([rights, metadata, policy, control, consent]):
+                st.error("Complete every final check to approve this post.")
             else:
                 item = {
                     **st.session_state.asset,
+                    "title": title,
                     "account": account,
                     "category": category,
                     "caption": caption,
                     "hashtags": hashtags,
-                    "queued_at": datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC"),
+                    "queued_at": utc_now(),
                     "creator_consent": "Confirmed",
-                    "handoff_status": "Ready for TikTok draft flow",
+                    "handoff_status": "Approved",
                 }
                 st.session_state.queue.insert(0, item)
-                add_event(f"Approved {item['filename']} for TikTok draft handoff")
-                st.success("Approved. The asset is now in the handoff queue.")
+                st.session_state.handoff_receipt = None
+                add_event("Post approved", f"{title} → {account}")
+                st.success("Approved. Your post is ready in Publish Queue.")
 
 
-def render_queue():
-    st.title("Handoff Queue")
-    render_version()
-    st.write("Approved videos waiting for TikTok upload/draft handoff.")
-    st.info("TikTok upload API note: after a successful upload-to-draft/inbox handoff, the creator continues final editing and posting from TikTok. This demo intentionally stops before any real API call.")
-    if len(st.session_state.queue) >= 5:
-        st.warning("Review guardrail: TikTok documents pending-share limits. Keep the queue small and creator-reviewed; this app is not a bulk publisher.")
+def render_library():
+    page_header("Library", "Content Library", "A focused home for finished cuts that are ready to become posts.")
+    q = st.text_input("Search finished videos", placeholder="Search by title, filename, or category")
+    matches = not q or q.lower() in "a founder's night routine founder story founder-night-routine.mp4".lower()
+    st.caption(f"{1 if matches else 0} finished video · public product preview")
+    st.write("")
+    if not matches:
+        st.markdown('<div class="card"><span class="status status-neutral">No results</span><h3>No finished videos match that search</h3><p>Try a title, filename, or content category.</p></div>', unsafe_allow_html=True)
+        return
+    left, middle, right = st.columns([.42, .35, .23])
+    with left:
+        path = str(Path(__file__).parent / "assets" / "sample_creator_video.mp4")
+        st.video(path, muted=True)
+    with middle:
+        st.markdown(
+            """
+            <div class="card">
+              <span class="status status-ready">● Final cut</span>
+              <h3>A founder's night routine</h3>
+              <p>Founder story<br>Vertical MP4 · 00:08<br>Added to creator library</p>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+    with right:
+        st.markdown('<div class="card"><div class="stat-label">Publishing status</div><div class="stat-value">Ready</div><p>No active handoff. Open this cut in Studio when the caption is ready.</p></div>', unsafe_allow_html=True)
+        def open_library_asset():
+            st.session_state.asset = sample_asset()
+            st.session_state.review_started = True
+            st.session_state.nav = "Studio"
+            add_event("Video opened", "A founder's night routine")
+        st.button("Review in Studio", type="primary", use_container_width=True, on_click=open_library_asset)
+
+
+def render_publish():
+    page_header("Publish", "Publish Queue", "Only creator-approved posts appear here. Every handoff is initiated one post at a time.")
+    ready = len(st.session_state.queue)
+    a, b, c = st.columns(3)
+    for col, label, value in [(a, "Approved", str(ready)), (b, "Sent this session", str(st.session_state.sent_count)), (c, "Destination", "TikTok drafts")]:
+        with col:
+            st.markdown(f'<div class="stat"><div class="stat-label">{label}</div><div class="stat-value">{value}</div></div>', unsafe_allow_html=True)
 
     if not st.session_state.queue:
-        st.warning("No approved videos yet. Open Creator Workspace and approve a sample asset.")
+        st.write("")
+        st.markdown('<div class="card"><span class="status status-neutral">Queue is clear</span><h3>No approved posts yet</h3><p>Open Publishing Studio, select a final cut, review the post details, and approve it for publishing.</p></div>', unsafe_allow_html=True)
+        st.button("Create a post", type="primary", on_click=lambda: st.session_state.update(nav="Studio"))
         return
 
+    st.markdown("## Ready to send")
     for index, item in enumerate(st.session_state.queue):
         with st.container(border=True):
-            col1, col2 = st.columns([0.72, 0.28])
-            with col1:
-                st.markdown(f"### {item['filename']}")
-                st.write(f"**Account:** {item['account']}  |  **Category:** {item['category']}  |  **Size:** {item['size_mb']} MB")
-                st.write(f"**Caption:** {item['caption']}")
-                st.write(f"**Hashtags:** {item['hashtags']}")
-                st.write(f"**Creator consent:** {item.get('creator_consent', 'Confirmed during review')}")
-                st.markdown(f"<span class='status-ready'>{item['handoff_status']}</span>", unsafe_allow_html=True)
-            with col2:
-                st.markdown("#### API handoff mock")
-                st.code("POST /v2/post/publish/inbox/video/init/", language="http")
-                if st.button("Send to TikTok Draft Flow (demo)", key=f"send_{index}"):
-                    item["handoff_status"] = "Demo sent to TikTok draft flow"
+            left, right = st.columns([.72, .28])
+            with left:
+                st.markdown('<span class="status status-ready">● Creator approved</span>', unsafe_allow_html=True)
+                st.markdown(f"### {item['title']}")
+                duration_copy = f" · {item['duration']}" if item.get("duration") else ""
+                st.write(f"**{item['account']}** · {item['category']}{duration_copy}")
+                st.write(item["caption"])
+                st.caption(f"{item['hashtags']}  ·  Approved {item['queued_at']}")
+            with right:
+                st.markdown("#### TikTok drafts")
+                st.write("Final editing and posting remain in TikTok.")
+                st.markdown('<span class="status status-preview">Preview integration</span>', unsafe_allow_html=True)
+                if st.button("Send to TikTok drafts", type="primary", key=f"send_{index}", use_container_width=True):
+                    item["handoff_status"] = "Preview handoff complete"
                     st.session_state.sent_count += 1
                     st.session_state.handoff_receipt = {
-                        "status": "Demo handoff complete",
-                        "destination": "TikTok draft / inbox flow",
-                        "scope": "video.upload",
-                        "creator_control": "Final editing and posting remain in TikTok",
-                        "live_api_call": "No — public review demo",
-                        "asset": item["filename"],
-                        "completed_at": datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC"),
+                        "Post": item["title"],
+                        "Creator": item["account"],
+                        "Destination": "TikTok draft / inbox flow",
+                        "Requested scope": "video.upload",
+                        "Creator control": "Final editing and posting remain in TikTok",
+                        "Integration status": "Preview — no TikTok request made",
+                        "Preview generated": utc_now(),
                     }
-                    add_event(f"Demo TikTok draft handoff completed for {item['filename']}")
-                    st.success("Demo handoff complete. No live TikTok API call was made.")
+                    add_event("Draft handoff preview", f"{item['title']} → TikTok drafts")
+                    st.rerun()
 
     if st.session_state.handoff_receipt:
         st.markdown("## Handoff receipt")
-        st.success("The approved video completed the public demo handoff. The creator would finish editing and posting inside TikTok.")
-        st.json(st.session_state.handoff_receipt)
+        receipt = st.session_state.handoff_receipt
+        st.markdown(
+            f"""
+            <div class="receipt">
+              <span class="status status-neutral">Preview · no TikTok request made</span>
+              <h3>{receipt['Post']}</h3>
+              <p>This receipt previews the information EM Posting will preserve after a creator-initiated handoff. No request was sent to TikTok. In production, the creator continues final editing and posting inside TikTok.</p>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+        st.json(receipt)
 
 
-def render_review_packet():
-    st.title("TikTok Review Packet")
-    render_version()
-    packet = f"""# EM Posting - TikTok App Review Packet
-
-## Short description
-{SHORT_DESCRIPTION}
-
-## Review explanation
-{APP_REVIEW_EXPLANATION}
-
-## Scope/product justification
-{SCOPE_JUSTIFICATION}
-
-## Silent demo video shot list
-{SILENT_DEMO_SCRIPT}
-
-## Optional voiceover
-{VOICEOVER_OPTION}
-"""
-    st.download_button("Download review packet", packet, file_name="em-posting-tiktok-review-packet.md", mime="text/markdown")
-    st.markdown("## Copy/paste fields")
-    st.text_area("Description under 120 characters", SHORT_DESCRIPTION, height=80)
-    st.text_area("App review explanation under 1000 characters", APP_REVIEW_EXPLANATION, height=190)
-    st.text_area("Scope/product justification", SCOPE_JUSTIFICATION, height=180)
-    st.markdown("## Full packet")
-    st.markdown(packet)
+def render_activity():
+    page_header("Workspace", "Activity", "A lightweight record of creator decisions made during this session.")
+    if st.session_state.events:
+        st.dataframe(st.session_state.events, use_container_width=True, hide_index=True)
+    else:
+        st.markdown('<div class="card"><span class="status status-neutral">No activity yet</span><h3>Your workflow history starts here</h3><p>Select a video, approve a post, or run a draft handoff preview to create activity.</p></div>', unsafe_allow_html=True)
 
 
-def render_production_plan():
-    st.title("Production Integration Plan")
-    render_version()
-    st.write("This page is here for app review and implementation clarity. It separates the public demo from the intended production TikTok integration.")
+def render_connections():
+    page_header("Settings", "Connections", "Manage where approved creator posts can go.")
+    left, right = st.columns([1, 1])
+    with left:
+        st.markdown(
+            """
+            <div class="card">
+              <span class="status status-preview">● Approval pending</span>
+              <h3>TikTok</h3>
+              <p>Content Posting API · requested scope <code>video.upload</code><br>Designed for draft/inbox handoff with creator final control.</p>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+        st.button("Connect TikTok after approval", disabled=True, use_container_width=True)
+    with right:
+        st.markdown(
+            """
+            <div class="card">
+              <span class="status status-neutral">Coming later</span>
+              <h3>Additional channels</h3>
+              <p>EM Posting is starting with a focused TikTok draft workflow. New destinations will be evaluated without turning the product into a bulk publisher.</p>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+    st.info("Public review environment: OAuth credentials and production tokens are intentionally not configured.")
 
-    col1, col2 = st.columns([0.55, 0.45])
-    with col1:
-        st.markdown("## Requested TikTok API use")
-        st.markdown(PRODUCTION_INTEGRATION_NOTES)
-    with col2:
-        st.markdown("## What EM Posting is not")
-        st.markdown("- Not a direct mass publisher")
-        st.markdown("- Not an engagement, comment, or scraping bot")
-        st.markdown("- Not an auto-generated content spam system")
-        st.markdown("- Not requesting analytics, follower, DM, or comment scopes")
-        st.markdown("- Not storing production tokens in this public app")
-
-    st.markdown("## Upload flow shape")
-    st.code(
-        """1. Authorized creator selects an approved MP4
-2. Creator reviews caption, hashtags, and account label
-3. Creator confirms consent and safety checklist
-4. Production app initializes TikTok video.upload inbox flow
-5. Video transfers to TikTok
-6. Creator receives TikTok inbox notification
-7. Creator completes final editing/posting in TikTok""",
-        language="text",
-    )
-
-
-def render_readiness():
-    st.title("Review Readiness")
-    render_version()
-    st.write("Final checklist before recording or submitting for TikTok developer review.")
-    for item in REVIEW_READINESS_CHECKLIST:
-        st.checkbox(item, value=True, disabled=True)
-    st.divider()
-    st.markdown("## Recommended recording path")
-    st.markdown("1. Dashboard → 2. Demo Guide → 3. Creator Workspace → 4. Handoff Queue → 5. TikTok Review Packet → 6. Terms/Privacy")
-    st.markdown("## Streamlit deploy settings")
-    st.code(
-        "Repository: reubenloo/tiktok_posting\n"
-        "Branch: main\n"
-        "Main file path: streamlit_app.py\n"
-        "Python: select 3.12 in Streamlit Cloud settings if available",
-        language="text",
-    )
 
 
 def render_terms():
-    st.title("Terms of Service")
-    render_version()
+    page_header("Legal", "Terms of Service", "Terms for the EM Posting creator workflow product.")
     st.markdown(TERMS)
 
 
 def render_privacy():
-    st.title("Privacy Policy")
-    render_version()
+    page_header("Legal", "Privacy Policy", "How EM Posting handles creator workflow information.")
     st.markdown(PRIVACY)
 
 
-def render_events():
-    st.title("Activity Log")
-    render_version()
-    if st.session_state.events:
-        st.table(st.session_state.events)
-    else:
-        st.write("No activity yet. Load and approve a sample asset to generate demo events.")
+init_state()
 
+NAV_ITEMS = ["Home", "Studio", "Library", "Publish", "Activity", "Connections", "Terms", "Privacy"]
+if "nav" not in st.session_state:
+    st.session_state.nav = "Home"
 
 with st.sidebar:
-    st.markdown("# 🧤 EM Posting")
-    page = st.radio(
-        "Navigate",
-        ["Dashboard", "Demo Guide", "Creator Workspace", "Handoff Queue", "TikTok Review Packet", "Production Plan", "Review Readiness", "Terms", "Privacy", "Activity Log"],
-    )
+    st.markdown('<div class="brand"><span class="brand-mark">✦</span>EM Posting</div>', unsafe_allow_html=True)
+    st.markdown('<div class="workspace-chip"><b>Reuben Creator Studio</b><br><span style="color:#aaa9b5">Creator workspace · Owner</span></div>', unsafe_allow_html=True)
+    st.write("")
+    st.radio("Workspace navigation", NAV_ITEMS, key="nav", label_visibility="collapsed")
     st.divider()
-    st.caption("Public review demo. Production credentials are not included.")
+    st.caption("Creator-controlled publishing")
+    st.caption(f"{APP_VERSION} · public product preview")
 
-if page == "Dashboard":
-    render_dashboard()
-elif page == "Demo Guide":
-    render_demo_recorder()
-elif page == "Creator Workspace":
-    render_workspace()
-elif page == "Handoff Queue":
-    render_queue()
-elif page == "TikTok Review Packet":
-    render_review_packet()
-elif page == "Production Plan":
-    render_production_plan()
-elif page == "Review Readiness":
-    render_readiness()
+page = st.session_state.nav
+if page == "Home":
+    render_home()
+elif page == "Studio":
+    render_studio()
+elif page == "Library":
+    render_library()
+elif page == "Publish":
+    render_publish()
+elif page == "Activity":
+    render_activity()
+elif page == "Connections":
+    render_connections()
 elif page == "Terms":
     render_terms()
-elif page == "Privacy":
-    render_privacy()
 else:
-    render_events()
+    render_privacy()
