@@ -1,5 +1,7 @@
+import ast
 import os
-from unittest.mock import AsyncMock, patch
+from pathlib import Path
+from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 
@@ -11,6 +13,21 @@ os.environ.setdefault("EM_POSTING_SESSION_STORE", "/tmp/em-posting-test-sessions
 
 import tiktok_integration as ti
 from server import app
+
+
+def test_empty_queue_is_hidden_when_receipt_exists():
+    module = ast.parse(Path("app.py").read_text())
+    helper = next(
+        node
+        for node in module.body
+        if isinstance(node, ast.FunctionDef) and node.name == "should_show_empty_queue"
+    )
+    namespace = {}
+    exec(compile(ast.Module(body=[helper], type_ignores=[]), "app.py", "exec"), namespace)
+    should_show = namespace["should_show_empty_queue"]
+    assert should_show([], None) is True
+    assert should_show([], {"Publish ID": "v_inbox_file~123"}) is False
+    assert should_show([{"title": "post"}], None) is False
 
 
 class FakeResponse:
@@ -49,6 +66,16 @@ def signed_session_cookie(session_id):
     return ti._serializer().dumps(session_id)
 
 
+def make_session(session_id, scopes="user.info.basic,video.upload"):
+    ti._sessions[session_id] = ti.TikTokSession(
+        access_token="access-token",
+        refresh_token="refresh-token",
+        open_id="open-id",
+        scopes=scopes,
+        profile={"display_name": "Reuben"},
+    )
+
+
 def test_login_sets_state_cookie_and_requests_narrow_scopes():
     client = TestClient(app)
     response = client.get("/auth/tiktok/login", follow_redirects=False)
@@ -74,13 +101,7 @@ def test_session_status_exposes_profile_not_tokens():
 
 
 def test_upload_initializes_and_transfers_mp4():
-    ti._sessions["session-2"] = ti.TikTokSession(
-        access_token="access-token",
-        refresh_token="refresh-token",
-        open_id="open-id",
-        scopes="user.info.basic,video.upload",
-        profile={"display_name": "Reuben"},
-    )
+    make_session("session-2")
     fake_client = FakeAsyncClient(
         post_responses=[FakeResponse({"data": {"publish_id": "v_inbox_file~123", "upload_url": "https://upload.example/video"}, "error": {"code": "ok", "message": ""}})],
         put_responses=[FakeResponse(status_code=201)],
@@ -98,13 +119,7 @@ def test_upload_initializes_and_transfers_mp4():
 
 
 def test_upload_requires_video_upload_scope():
-    ti._sessions["session-3"] = ti.TikTokSession(
-        access_token="access-token",
-        refresh_token="refresh-token",
-        open_id="open-id",
-        scopes="user.info.basic",
-        profile={},
-    )
+    make_session("session-3", scopes="user.info.basic")
     client = TestClient(app)
     response = client.post(
         "/api/tiktok/upload",
@@ -112,3 +127,33 @@ def test_upload_requires_video_upload_scope():
         files={"video": ("sample.mp4", b"fake-mp4-data", "video/mp4")},
     )
     assert response.status_code == 403
+
+
+def test_status_returns_tiktok_processing_state():
+    make_session("session-4")
+    fake_client = FakeAsyncClient(
+        post_responses=[FakeResponse({"data": {"status": "PROCESSING_UPLOAD"}, "error": {"code": "ok", "message": ""}})],
+    )
+    with patch.object(ti.httpx, "AsyncClient", return_value=fake_client):
+        client = TestClient(app)
+        response = client.get(
+            "/api/tiktok/status/v_inbox_file~123",
+            cookies={ti.SESSION_COOKIE: signed_session_cookie("session-4")},
+        )
+    assert response.status_code == 200
+    assert response.json()["data"]["status"] == "PROCESSING_UPLOAD"
+
+
+def test_status_error_is_not_reported_as_success():
+    make_session("session-5")
+    fake_client = FakeAsyncClient(
+        post_responses=[FakeResponse({"data": {}, "error": {"code": "invalid_publish_id", "message": "Unknown publish ID"}})],
+    )
+    with patch.object(ti.httpx, "AsyncClient", return_value=fake_client):
+        client = TestClient(app)
+        response = client.get(
+            "/api/tiktok/status/bad-id",
+            cookies={ti.SESSION_COOKIE: signed_session_cookie("session-5")},
+        )
+    assert response.status_code == 502
+    assert response.json()["detail"] == "Unknown publish ID"

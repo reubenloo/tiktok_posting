@@ -7,7 +7,7 @@ from textwrap import dedent
 import streamlit as st
 import httpx
 
-APP_VERSION = "v0.9.0"
+APP_VERSION = "v0.9.1"
 APP_NAME = "EM Posting"
 TAGLINE = "One calm place to take a finished video from final cut to an approved TikTok draft."
 
@@ -245,6 +245,10 @@ def backend_json(method, path, **kwargs):
 def tiktok_session():
     payload, error = backend_json("GET", "/api/tiktok/session")
     return payload if payload and payload.get("connected") else None, error
+
+
+def should_show_empty_queue(queue, receipt):
+    return not queue and not receipt
 
 
 def page_header(eyebrow, title, subtitle):
@@ -495,7 +499,7 @@ def render_publish():
                 unsafe_allow_html=True,
             )
 
-    if not st.session_state.queue:
+    if should_show_empty_queue(st.session_state.queue, st.session_state.receipt):
         st.write("")
         st.markdown(
             '<div class="card"><span class="pill pill-neutral">Queue is clear</span>'
@@ -507,7 +511,8 @@ def render_publish():
         st.button("Go to Studio", type="primary", on_click=goto, args=("Studio",))
         return
 
-    st.markdown("## Ready to hand off")
+    if st.session_state.queue:
+        st.markdown("## Ready to hand off")
     for index, item in enumerate(st.session_state.queue):
         with st.container(border=True):
             left, right = st.columns([.66, .34])
@@ -528,6 +533,7 @@ def render_publish():
                     else:
                         video_data = Path(item["path"]).read_bytes()
                     with st.spinner("Uploading the approved MP4 to TikTok drafts…"):
+                        st.session_state.receipt = None
                         receipt, error = backend_json(
                             "POST",
                             "/api/tiktok/upload",
@@ -538,6 +544,14 @@ def render_publish():
                     else:
                         assert receipt is not None
                         assert session is not None
+                        status_payload, status_error = backend_json(
+                            "GET",
+                            f"/api/tiktok/status/{receipt['publish_id']}",
+                        )
+                        status = (
+                            (status_payload or {}).get("data", {}).get("status")
+                            or "TRANSFER_ACCEPTED"
+                        )
                         st.session_state.sent_count += 1
                         st.session_state.receipt = {
                             "Post": item["title"],
@@ -547,10 +561,15 @@ def render_publish():
                             "Product": "Content Posting API",
                             "Scope": "video.upload",
                             "Publish ID": receipt["publish_id"],
+                            "TikTok status": status,
                             "Asset ID": receipt["fingerprint"],
                             "Next step": receipt["next_step"],
                             "Uploaded": utc_now(),
                         }
+                        if status_error:
+                            st.session_state.receipt["Status note"] = (
+                                "The MP4 transfer succeeded; TikTok status was not available yet."
+                            )
                         st.session_state.queue.pop(index)
                         st.rerun()
 
@@ -560,10 +579,10 @@ def render_publish():
         st.markdown(
             f"""
             <div class="receipt">
-              <span class="pill pill-ok">● Uploaded to TikTok drafts</span>
+              <span class="pill pill-ok">● Transfer accepted by TikTok</span>
               <h3>{receipt['Post']}</h3>
               <p class="note">TikTok accepted the MP4 transfer and returned a real publish ID.
-              Open the TikTok inbox notification to complete the caption, final editing, and posting.</p>
+              Check the status below, then open the TikTok inbox notification when processing completes.</p>
             </div>
             """,
             unsafe_allow_html=True,
