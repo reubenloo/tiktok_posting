@@ -5,7 +5,7 @@ from textwrap import dedent
 
 import streamlit as st
 
-APP_VERSION = "v0.8.2"
+APP_VERSION = "v0.8.3"
 APP_NAME = "EM Posting"
 TAGLINE = "One calm place to take a finished video from final cut to an approved TikTok draft."
 
