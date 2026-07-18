@@ -5,7 +5,7 @@ from textwrap import dedent
 
 import streamlit as st
 
-APP_VERSION = "v0.8.0"
+APP_VERSION = "v0.8.1"
 APP_NAME = "EM Posting"
 TAGLINE = "One calm place to take a finished video from final cut to an approved TikTok draft."
 
@@ -502,6 +502,22 @@ def render_publish():
             unsafe_allow_html=True,
         )
         st.json(receipt)
+        left, right = st.columns(2)
+        with left:
+            st.button(
+                "View terms & privacy",
+                use_container_width=True,
+                on_click=goto,
+                args=("Legal",),
+            )
+        with right:
+            st.button(
+                "Prepare another post",
+                type="primary",
+                use_container_width=True,
+                on_click=goto,
+                args=("Studio",),
+            )
 
 
 # -------------------------------------------------------------------------- Legal
