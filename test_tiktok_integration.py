@@ -30,6 +30,45 @@ def test_empty_queue_is_hidden_when_receipt_exists():
     assert should_show([{"title": "post"}], None) is False
 
 
+def load_app_helpers(*names):
+    module = ast.parse(Path("app.py").read_text())
+    helpers = [
+        node for node in module.body if isinstance(node, ast.FunctionDef) and node.name in names
+    ]
+    namespace = {}
+    exec(compile(ast.Module(body=helpers, type_ignores=[]), "app.py", "exec"), namespace)
+    return namespace
+
+
+def test_duplicate_approval_detects_same_asset_only():
+    helper = load_app_helpers("is_duplicate_approval")["is_duplicate_approval"]
+    queue = [{"fingerprint": "first"}]
+    assert helper(queue, {"fingerprint": "first"}) is True
+    assert helper(queue, {"fingerprint": "second"}) is False
+
+
+def test_existing_queue_duplicates_are_collapsed():
+    helper = load_app_helpers("deduplicate_queue")["deduplicate_queue"]
+    queue = [
+        {"fingerprint": "same", "approved_at": "newer"},
+        {"fingerprint": "same", "approved_at": "older"},
+        {"fingerprint": "different", "approved_at": "other"},
+    ]
+    assert helper(queue) == [queue[0], queue[2]]
+
+
+def test_tiktok_status_copy_does_not_claim_inbox_before_delivery():
+    helper = load_app_helpers("tiktok_status_copy")["tiktok_status_copy"]
+    _, processing = helper("PROCESSING_UPLOAD")
+    delivered_title, delivered = helper("SEND_TO_USER_INBOX")
+    failed_title, failed = helper("FAILED", "frame_rate_check_failed")
+    assert "No inbox notification is expected yet" in processing
+    assert delivered_title == "Inbox notification sent"
+    assert "creator inbox notification was delivered" in delivered
+    assert failed_title == "TikTok processing failed"
+    assert "frame_rate_check_failed" in failed
+
+
 class FakeResponse:
     def __init__(self, payload=None, status_code=200):
         self._payload = payload or {}

@@ -7,7 +7,7 @@ from textwrap import dedent
 import streamlit as st
 import httpx
 
-APP_VERSION = "v0.9.1"
+APP_VERSION = "v0.9.2"
 APP_NAME = "EM Posting"
 TAGLINE = "One calm place to take a finished video from final cut to an approved TikTok draft."
 
@@ -181,17 +181,34 @@ def utc_now():
     return datetime.now(UTC).strftime("%Y-%m-%d %H:%M:%S UTC")
 
 
+def deduplicate_queue(queue):
+    unique = []
+    fingerprints = set()
+    for item in queue:
+        fingerprint = item.get("fingerprint")
+        if fingerprint and fingerprint in fingerprints:
+            continue
+        unique.append(item)
+        if fingerprint:
+            fingerprints.add(fingerprint)
+    return unique
+
+
 def init_state():
     defaults = {
         "asset": None,
         "queue": [],
         "receipt": None,
+        "receipts": [],
         "sent_count": 0,
         "reviewed": False,
     }
     for key, value in defaults.items():
         if key not in st.session_state:
             st.session_state[key] = value
+    st.session_state.queue = deduplicate_queue(st.session_state.queue)
+    if st.session_state.receipt and not st.session_state.receipts:
+        st.session_state.receipts.append(st.session_state.receipt)
 
 
 
@@ -249,6 +266,24 @@ def tiktok_session():
 
 def should_show_empty_queue(queue, receipt):
     return not queue and not receipt
+
+
+def is_duplicate_approval(queue, asset):
+    fingerprint = (asset or {}).get("fingerprint")
+    return bool(fingerprint) and any(item.get("fingerprint") == fingerprint for item in queue)
+
+
+def tiktok_status_copy(status, fail_reason=None):
+    if status == "SEND_TO_USER_INBOX":
+        return "Inbox notification sent", "TikTok reports that the creator inbox notification was delivered. Open TikTok → Inbox to continue editing."
+    if status == "PUBLISH_COMPLETE":
+        return "Creator completed the post", "The creator opened TikTok's inbox flow and successfully posted from this upload."
+    if status == "FAILED":
+        reason = fail_reason or "TikTok did not provide a failure reason"
+        return "TikTok processing failed", f"The transfer did not reach the creator inbox. TikTok reason: {reason}."
+    if status == "PROCESSING_UPLOAD":
+        return "TikTok is processing the upload", "No inbox notification is expected yet. Wait briefly, then refresh this status."
+    return "Transfer accepted; delivery unconfirmed", "TikTok returned a publish ID, but inbox delivery is not confirmed yet. Refresh the status before checking TikTok."
 
 
 def page_header(eyebrow, title, subtitle):
@@ -452,6 +487,8 @@ def render_studio():
                 st.warning("Add a caption before approving.")
             elif not all([rights, reviewed, policy, control, consent]):
                 st.warning("Complete every final check to approve this post.")
+            elif is_duplicate_approval(st.session_state.queue, st.session_state.asset):
+                st.warning("This exact video is already approved and waiting on the Publish page.")
             else:
                 item = {
                     **st.session_state.asset,
@@ -468,7 +505,7 @@ def render_studio():
 
 
 def render_publish():
-    page_header("Publish", "Publish", "Connect an authorized TikTok account and upload one creator-approved MP4 to its draft/inbox flow.")
+    page_header("Publish", "Publish", "Connect an authorized TikTok account and upload creator-approved MP4s one at a time to TikTok's inbox flow.")
     version_caption()
 
     session, _ = tiktok_session()
@@ -491,7 +528,7 @@ def render_publish():
     for col, label, value in [
         (a, "Approved", str(len(st.session_state.queue))),
         (b, "Handoffs this session", str(st.session_state.sent_count)),
-        (c, "Destination", "TikTok drafts"),
+        (c, "Destination", "TikTok inbox"),
     ]:
         with col:
             st.markdown(
@@ -524,7 +561,7 @@ def render_publish():
                 st.write(item["caption"])
                 st.caption(f"Approved {item['approved_at']} · asset {item['fingerprint']}")
             with right:
-                st.markdown("#### TikTok drafts")
+                st.markdown("#### TikTok inbox handoff")
                 st.markdown('<span class="pill pill-ok">● Sandbox draft upload</span>', unsafe_allow_html=True)
                 st.write("The MP4 is transferred to TikTok; captioning, final editing, and posting remain in TikTok.")
                 if st.button("Upload to TikTok drafts", type="primary", key=f"send_{index}", use_container_width=True, disabled=not session):
@@ -552,8 +589,9 @@ def render_publish():
                             (status_payload or {}).get("data", {}).get("status")
                             or "TRANSFER_ACCEPTED"
                         )
+                        fail_reason = (status_payload or {}).get("data", {}).get("fail_reason")
                         st.session_state.sent_count += 1
-                        st.session_state.receipt = {
+                        new_receipt = {
                             "Post": item["title"],
                             "Account": session.get("profile", {}).get("display_name", item["account"]),
                             "Caption notes": item["caption"],
@@ -562,48 +600,60 @@ def render_publish():
                             "Scope": "video.upload",
                             "Publish ID": receipt["publish_id"],
                             "TikTok status": status,
+                            "Failure reason": fail_reason,
                             "Asset ID": receipt["fingerprint"],
                             "Next step": receipt["next_step"],
                             "Uploaded": utc_now(),
                         }
                         if status_error:
-                            st.session_state.receipt["Status note"] = (
+                            new_receipt["Status note"] = (
                                 "The MP4 transfer succeeded; TikTok status was not available yet."
                             )
+                        st.session_state.receipt = new_receipt
+                        st.session_state.receipts.insert(0, new_receipt)
                         st.session_state.queue.pop(index)
+                        if (
+                            st.session_state.asset
+                            and st.session_state.asset.get("fingerprint") == item.get("fingerprint")
+                        ):
+                            st.session_state.asset = None
+                            st.session_state.reviewed = False
                         st.rerun()
 
-    if st.session_state.receipt:
-        st.markdown("## Handoff receipt")
-        receipt = st.session_state.receipt
-        st.markdown(
-            f"""
-            <div class="receipt">
-              <span class="pill pill-ok">● Transfer accepted by TikTok</span>
-              <h3>{receipt['Post']}</h3>
-              <p class="note">TikTok accepted the MP4 transfer and returned a real publish ID.
-              Check the status below, then open the TikTok inbox notification when processing completes.</p>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-        st.json(receipt)
+    if st.session_state.receipts:
+        st.markdown("## Upload history")
+        st.caption("A publish ID proves TikTok accepted a transfer task. Only SEND_TO_USER_INBOX confirms inbox delivery.")
+        for receipt_index, receipt in enumerate(st.session_state.receipts):
+            status = receipt.get("TikTok status", "TRANSFER_ACCEPTED")
+            title, copy = tiktok_status_copy(status, receipt.get("Failure reason"))
+            pill_class = "pill-ok" if status in {"SEND_TO_USER_INBOX", "PUBLISH_COMPLETE"} else "pill-preview"
+            with st.container(border=True):
+                st.markdown(
+                    f'<span class="pill {pill_class}">● {title}</span><h3>{receipt["Post"]}</h3><p class="note">{copy}</p>',
+                    unsafe_allow_html=True,
+                )
+                st.caption(f'Publish ID: {receipt["Publish ID"]} · uploaded {receipt["Uploaded"]}')
+                if st.button("Refresh TikTok status", key=f"status_{receipt_index}_{receipt['Publish ID']}"):
+                    status_payload, status_error = backend_json(
+                        "GET", f"/api/tiktok/status/{receipt['Publish ID']}"
+                    )
+                    if status_error:
+                        st.error(status_error)
+                    else:
+                        status_data = (status_payload or {}).get("data", {})
+                        receipt["TikTok status"] = status_data.get("status", status)
+                        receipt["Failure reason"] = status_data.get("fail_reason")
+                        receipt["Uploaded bytes"] = status_data.get("uploaded_bytes")
+                        st.session_state.receipt = st.session_state.receipts[0]
+                        st.rerun()
+                with st.expander("Receipt details"):
+                    st.json({key: value for key, value in receipt.items() if value is not None})
+
         left, right = st.columns(2)
         with left:
-            st.button(
-                "View terms & privacy",
-                use_container_width=True,
-                on_click=goto,
-                args=("Legal",),
-            )
+            st.button("View terms & privacy", use_container_width=True, on_click=goto, args=("Legal",))
         with right:
-            st.button(
-                "Prepare another post",
-                type="primary",
-                use_container_width=True,
-                on_click=goto,
-                args=("Studio",),
-            )
+            st.button("Prepare another post", type="primary", use_container_width=True, on_click=goto, args=("Studio",))
 
 
 # -------------------------------------------------------------------------- Legal
