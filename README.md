@@ -88,7 +88,7 @@ In Render's **New Web Service** form, use:
 - **Region:** Singapore
 - **Root Directory:** leave blank
 - **Build Command:** `pip install -r requirements.txt`
-- **Start Command:** `streamlit run streamlit_app.py --server.address 0.0.0.0 --server.port $PORT --server.headless true`
+- **Start Command:** `streamlit run app.py --server.address 0.0.0.0 --server.port $PORT --server.headless true`
 - **Instance Type:** Free is sufficient for the public demo (expect a cold start after inactivity)
 - **Environment Variables:** none required for the public demo
 

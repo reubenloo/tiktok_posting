@@ -1,10 +1,11 @@
 import hashlib
 from datetime import datetime
+from pathlib import Path
 from textwrap import dedent
 
 import streamlit as st
 
-APP_VERSION = "v0.5.3"
+APP_VERSION = "v0.5.4"
 APP_NAME = "EM Posting"
 
 SHORT_DESCRIPTION = (

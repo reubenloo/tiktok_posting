@@ -1,4 +1,7 @@
-# Streamlit Community Cloud entrypoint.
-# Keep the main app implementation in app.py so local ops can still run `streamlit run app.py`.
+# Streamlit entrypoint. Execute app.py on every Streamlit script run.
+# Importing it would cache its module body and produce an empty rerun/session.
 
-from app import *  # noqa: F401,F403
+import runpy
+from pathlib import Path
+
+runpy.run_path(str(Path(__file__).with_name("app.py")), run_name="__main__")
