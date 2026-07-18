@@ -16,6 +16,8 @@ import websockets
 from fastapi import FastAPI, Request, Response, WebSocket, WebSocketDisconnect
 from fastapi.responses import PlainTextResponse, StreamingResponse
 
+from tiktok_integration import router as tiktok_router
+
 ROOT = Path(__file__).resolve().parent
 VERIFICATION_FILENAME = "tiktokn4FgVVIg3PMCSpkEskVM1xXLvescL2S3.txt"
 VERIFICATION_TEXT = (ROOT / VERIFICATION_FILENAME).read_text(encoding="utf-8").strip()
@@ -65,6 +67,7 @@ async def lifespan(_: FastAPI):
 
 
 app = FastAPI(lifespan=lifespan)
+app.include_router(tiktok_router)
 
 
 @app.get(f"/{VERIFICATION_FILENAME}", response_class=PlainTextResponse)
@@ -77,6 +80,7 @@ async def proxy_http(request: Request, path: str):
     target = f"{STREAMLIT_HTTP}/{path}"
     headers = dict(request.headers)
     headers.pop("host", None)
+    headers["x-em-posting-origin"] = str(request.base_url).rstrip("/")
     body = await request.body()
     client = httpx.AsyncClient(timeout=None, follow_redirects=False)
     upstream = await client.send(
@@ -110,6 +114,9 @@ async def proxy_websocket(websocket: WebSocket, path: str):
     headers = [(key, value) for key, value in websocket.headers.items() if key.lower() not in {
         "host", "origin", "connection", "upgrade", "sec-websocket-key", "sec-websocket-version", "sec-websocket-extensions", "sec-websocket-protocol"
     }]
+    forwarded_proto = websocket.headers.get("x-forwarded-proto", "https")
+    forwarded_host = websocket.headers.get("x-forwarded-host") or websocket.headers.get("host", "")
+    headers.append(("x-em-posting-origin", f"{forwarded_proto}://{forwarded_host}"))
     try:
         async with websockets.connect(
             target,

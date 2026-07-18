@@ -1,11 +1,13 @@
 import hashlib
+import json
 from datetime import UTC, datetime
 from pathlib import Path
 from textwrap import dedent
 
 import streamlit as st
+import httpx
 
-APP_VERSION = "v0.8.3"
+APP_VERSION = "v0.9.0"
 APP_NAME = "EM Posting"
 TAGLINE = "One calm place to take a finished video from final cut to an approved TikTok draft."
 
@@ -24,12 +26,15 @@ SHORT_DESCRIPTION = (
 
 # Kept in sync with the submission copy in README.md (App review explanation, under 1000 chars).
 APP_REVIEW_EXPLANATION = (
-    "EM Posting is a creator workflow app for preparing finished short-form videos for TikTok. "
-    "An authorized creator selects or uploads a completed MP4, reviews the account, description, "
-    "and content confirmations, then explicitly approves the video for TikTok's draft flow. The "
-    "requested Content Posting API integration reduces manual file transfer while preserving human "
-    "review and final posting control inside TikTok. It is a focused creator publishing workspace, "
-    "not a mass-posting service. It does not scrape data, automate engagement, or publish spam."
+    "EM Posting uses Login Kit and TikTok's Content Posting API to upload one creator-approved MP4 "
+    "to the authorized creator's TikTok draft/inbox flow. The creator signs in with TikTok and "
+    "grants user.info.basic and video.upload. In EM Posting, the creator selects or uploads a "
+    "finished MP4, previews it, confirms content rights and policy compliance, and explicitly "
+    "approves the transfer. EM Posting initializes the upload through "
+    "/v2/post/publish/inbox/video/init/ using FILE_UPLOAD and transfers the MP4 to TikTok's "
+    "provided upload URL. The creator then opens the notification in TikTok to complete the "
+    "caption, final editing, and posting. EM Posting does not directly publish, bulk post, scrape "
+    "data, or automate engagement."
 )
 
 TERMS = dedent(
@@ -60,9 +65,9 @@ TERMS = dedent(
     You must have the rights and permissions required to upload and publish the content you submit.
 
     ## Availability
-    Features may change as integrations mature. This public build is a workflow preview: it does not
-    connect to a live platform account, and preview features must not be represented as completed
-    production integrations.
+    Features may change as integrations mature. TikTok Sandbox connections and draft uploads are
+    available only to authorized pilot users. A successful draft upload does not guarantee that the
+    creator will complete or publish the post inside TikTok.
 
     ## Contact
     Product and policy questions may be sent to eczemamitten@gmail.com while EM Posting is in its
@@ -88,14 +93,14 @@ PRIVACY = dedent(
     platform handoffs, and show workflow receipts to authorized users.
 
     ## Platform data
-    The intended TikTok integration is limited to uploading a creator-approved video to the draft
-    flow. EM Posting does not request TikTok direct messages, comments, follower lists, or unrelated
-    account data.
+    The TikTok integration uses Login Kit to access the connected creator's basic identity and uses
+    video.upload only after explicit approval to transfer one MP4 to the draft/inbox flow. EM Posting
+    does not request direct messages, comments, follower lists, analytics, or unrelated account data.
 
     ## Storage
-    This public build uses session-only state and does not permanently store uploaded videos. A
-    production service would temporarily process files and retain workflow records only as needed to
-    provide the creator-requested service.
+    This pilot uses session-only application state and does not permanently store uploaded videos.
+    TikTok access and refresh tokens are kept server-side for the active pilot session and are never
+    exposed in the browser or public source repository. Sessions can be disconnected at any time.
 
     ## Sharing
     Content would be sent to a platform only after an authorized creator initiates the handoff. EM
@@ -208,7 +213,38 @@ def sample_asset():
 
 
 def version_caption():
-    st.caption(f"{APP_VERSION} · creator publishing workspace · workflow preview")
+    st.caption(f"{APP_VERSION} · creator publishing workspace · TikTok Sandbox")
+
+
+def backend_origin():
+    forwarded = st.context.headers.get("x-em-posting-origin")
+    return forwarded or "http://127.0.0.1:10000"
+
+
+def backend_cookies():
+    return dict(st.context.cookies)
+
+
+def backend_json(method, path, **kwargs):
+    try:
+        response = httpx.request(
+            method,
+            f"{backend_origin()}{path}",
+            cookies=backend_cookies(),
+            timeout=150,
+            **kwargs,
+        )
+        payload = response.json()
+    except (httpx.HTTPError, json.JSONDecodeError) as exc:
+        return None, f"EM Posting could not reach its TikTok service: {exc}"
+    if response.is_error:
+        return None, payload.get("detail", f"TikTok service returned HTTP {response.status_code}")
+    return payload, None
+
+
+def tiktok_session():
+    payload, error = backend_json("GET", "/api/tiktok/session")
+    return payload if payload and payload.get("connected") else None, error
 
 
 def page_header(eyebrow, title, subtitle):
@@ -248,7 +284,7 @@ def render_home():
           <span class="hero-badge">creator workspace</span><span class="hero-badge">review-first</span>
           <h1>Final cut in.<br>Approved TikTok draft out.</h1>
           <p>{TAGLINE} Select a finished video, review the account and description, give an
-          explicit approval, and preview an honest draft handoff — you keep the final say.</p>
+          explicit approval, and upload it into TikTok's draft/inbox flow — you keep the final say.</p>
         </div>
         """,
         unsafe_allow_html=True,
@@ -278,7 +314,7 @@ def render_home():
         (x, "01", "Select", "Pick the bundled sample video or upload a finished MP4."),
         (y, "02", "Review", "Confirm the account and write the description sent to TikTok."),
         (z, "03", "Approve", "Complete the checks and explicitly approve the post."),
-        (w, "04", "Handoff", "Preview a Sandbox draft handoff receipt — nothing is sent."),
+        (w, "04", "Upload", "Send the approved MP4 to TikTok drafts using video.upload."),
     ]
     for col, num, title, copy in steps:
         with col:
@@ -293,10 +329,10 @@ def render_home():
         st.markdown(
             """
             <div class="card">
-              <span class="pill pill-preview">● Workflow preview</span>
-              <h3>No live platform calls</h3>
-              <p>This public build never contacts TikTok. The handoff step produces a readable
-              receipt so a reviewer can see exactly what a real submission would carry.</p>
+              <span class="pill pill-ok">● Real Sandbox integration</span>
+              <h3>Login Kit + video.upload</h3>
+              <p>Authorized pilot creators connect TikTok, approve one MP4, and transfer it to the
+              TikTok draft/inbox flow using the Content Posting API.</p>
             </div>
             """,
             unsafe_allow_html=True,
@@ -333,7 +369,7 @@ def render_studio():
             uploaded = st.file_uploader(
                 "Choose a finished vertical video",
                 type=["mp4"],
-                help="MP4 only. This public build keeps uploads in session memory and never sends them anywhere.",
+                help="MP4 only. The file stays in session memory until you explicitly upload it to TikTok drafts.",
             )
             if uploaded is not None:
                 st.video(uploaded)
@@ -389,13 +425,13 @@ def render_studio():
     with right:
         st.markdown("### 2 · Review & 3 · Approve")
         with st.form("post_review"):
-            account = st.selectbox("Publish as", ["Creator (primary)", "Studio brand", "Personal creator"])
+            account = st.selectbox("Workspace label", ["Creator (primary)", "Studio brand", "Personal creator"])
             caption = st.text_area(
-                "Caption",
+                "Caption notes",
                 "The night routine that turned a hard season into a repeatable system.",
                 max_chars=CAPTION_MAX,
                 height=120,
-                help="This caption accompanies the creator-approved video.",
+                help="Draft upload transfers the MP4 only. Use these notes when finishing the caption inside TikTok.",
             )
             st.markdown("#### Final checks")
             rights = st.checkbox("I have the rights and permission to publish this video")
@@ -420,7 +456,7 @@ def render_studio():
                     "approved_at": utc_now(),
                 }
                 st.session_state.queue.insert(0, item)
-                st.success("Approved. Open **Publish** to preview the draft handoff.")
+                st.success("Approved. Open **Publish** to connect TikTok and upload the draft.")
                 st.button("Go to Publish", type="primary", on_click=goto, args=("Publish",))
 
 
@@ -428,8 +464,24 @@ def render_studio():
 
 
 def render_publish():
-    page_header("Publish", "Publish", "Only creator-approved posts appear here. Each handoff is previewed one post at a time.")
+    page_header("Publish", "Publish", "Connect an authorized TikTok account and upload one creator-approved MP4 to its draft/inbox flow.")
     version_caption()
+
+    session, _ = tiktok_session()
+    st.markdown("## TikTok connection")
+    if session:
+        profile = session.get("profile", {})
+        left, right = st.columns([.72, .28])
+        with left:
+            st.success(f"Connected as **{profile.get('display_name', 'TikTok creator')}**")
+            st.caption("Authorized scopes: " + ", ".join(session.get("scopes", [])))
+        with right:
+            if st.button("Disconnect TikTok", use_container_width=True):
+                backend_json("POST", "/api/tiktok/disconnect")
+                st.rerun()
+    else:
+        st.info("Connect TikTok before uploading. TikTok will ask for user.info.basic and video.upload consent.")
+        st.link_button("Connect with TikTok", f"{WEBSITE_URL}/auth/tiktok/login", type="primary", use_container_width=True)
 
     a, b, c = st.columns(3)
     for col, label, value in [
@@ -468,23 +520,39 @@ def render_publish():
                 st.caption(f"Approved {item['approved_at']} · asset {item['fingerprint']}")
             with right:
                 st.markdown("#### TikTok drafts")
-                st.markdown('<span class="pill pill-preview">● Sandbox preview</span>', unsafe_allow_html=True)
-                st.write("Final editing and posting remain in TikTok.")
-                if st.button("Preview draft handoff", type="primary", key=f"send_{index}", use_container_width=True):
-                    st.session_state.sent_count += 1
-                    st.session_state.receipt = {
-                        "Post": item["title"],
-                        "Account": item["account"],
-                        "Caption": item["caption"],
-                        "Destination": "TikTok draft / inbox flow",
-                        "Requested product": "Content Posting API",
-                        "Requested scope": "video.upload",
-                        "Website domain": WEBSITE_DOMAIN,
-                        "Creator control": "Final editing and posting remain in TikTok",
-                        "Integration status": "Preview — no request was sent to TikTok",
-                        "Preview generated": utc_now(),
-                    }
-                    st.rerun()
+                st.markdown('<span class="pill pill-ok">● Sandbox draft upload</span>', unsafe_allow_html=True)
+                st.write("The MP4 is transferred to TikTok; captioning, final editing, and posting remain in TikTok.")
+                if st.button("Upload to TikTok drafts", type="primary", key=f"send_{index}", use_container_width=True, disabled=not session):
+                    if item.get("video_data"):
+                        video_data = item["video_data"]
+                    else:
+                        video_data = Path(item["path"]).read_bytes()
+                    with st.spinner("Uploading the approved MP4 to TikTok drafts…"):
+                        receipt, error = backend_json(
+                            "POST",
+                            "/api/tiktok/upload",
+                            files={"video": (item["filename"], video_data, "video/mp4")},
+                        )
+                    if error:
+                        st.error(error)
+                    else:
+                        assert receipt is not None
+                        assert session is not None
+                        st.session_state.sent_count += 1
+                        st.session_state.receipt = {
+                            "Post": item["title"],
+                            "Account": session.get("profile", {}).get("display_name", item["account"]),
+                            "Caption notes": item["caption"],
+                            "Destination": receipt["destination"],
+                            "Product": "Content Posting API",
+                            "Scope": "video.upload",
+                            "Publish ID": receipt["publish_id"],
+                            "Asset ID": receipt["fingerprint"],
+                            "Next step": receipt["next_step"],
+                            "Uploaded": utc_now(),
+                        }
+                        st.session_state.queue.pop(index)
+                        st.rerun()
 
     if st.session_state.receipt:
         st.markdown("## Handoff receipt")
@@ -492,11 +560,10 @@ def render_publish():
         st.markdown(
             f"""
             <div class="receipt">
-              <span class="pill pill-preview">● Preview · no TikTok request made</span>
+              <span class="pill pill-ok">● Uploaded to TikTok drafts</span>
               <h3>{receipt['Post']}</h3>
-              <p class="note">This receipt previews what a real, creator-initiated submission would
-              carry. Nothing was sent to TikTok. In production,
-              the creator continues final editing and posting inside TikTok.</p>
+              <p class="note">TikTok accepted the MP4 transfer and returned a real publish ID.
+              Open the TikTok inbox notification to complete the caption, final editing, and posting.</p>
             </div>
             """,
             unsafe_allow_html=True,
@@ -561,7 +628,7 @@ with st.sidebar:
     st.radio("Workspace navigation", NAV_ITEMS, key="nav", label_visibility="collapsed")
     st.divider()
     st.caption("Creator-controlled publishing")
-    st.caption(f"{APP_VERSION} · workflow preview")
+    st.caption(f"{APP_VERSION} · TikTok Sandbox")
 
 page = st.session_state.nav
 if page == "Studio":
