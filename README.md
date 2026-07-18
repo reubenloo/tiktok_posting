@@ -77,6 +77,23 @@ streamlit run streamlit_app.py
 
 `runtime.txt` is included as a hint, but Streamlit Community Cloud may require Python 3.12 to be selected in its settings UI.
 
+## Deploy to Render
+
+EM Posting can also run as a Render Web Service. The included `render.yaml` binds Streamlit to Render's injected `PORT` on `0.0.0.0`; it does not add credentials or change the public demo into a live TikTok integration.
+
+In Render's **New Web Service** form, use:
+
+- **Name:** `em-posting` (or any available name)
+- **Branch:** `main`
+- **Region:** Singapore
+- **Root Directory:** leave blank
+- **Build Command:** `pip install -r requirements.txt`
+- **Start Command:** `streamlit run streamlit_app.py --server.address 0.0.0.0 --server.port $PORT --server.headless true`
+- **Instance Type:** Free is sufficient for the public demo (expect a cold start after inactivity)
+- **Environment Variables:** none required for the public demo
+
+Render reads `.python-version` and will use Python 3.12. The `render.yaml` file provides the same deploy settings if you later create the service through a Render Blueprint.
+
 ## Security notes
 
 - Do not commit API tokens, cookies, customer files, private videos, or production secrets.
