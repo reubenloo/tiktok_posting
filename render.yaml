@@ -8,3 +8,9 @@ services:
     buildCommand: pip install -r requirements.txt
     startCommand: python server.py
     healthCheckPath: /_stcore/health
+    envVars:
+      # Externally-facing origin for Home, Terms, Privacy, sign-in, and the OAuth redirect URI.
+      # Set this in the Render dashboard to the owned production custom domain (no "tiktok" in it),
+      # e.g. https://app.emposting.com. Leave unset to use the Sandbox/local fallback.
+      - key: EM_POSTING_PUBLIC_URL
+        sync: false

@@ -20,7 +20,12 @@ TIKTOK_TOKEN_URL = "https://open.tiktokapis.com/v2/oauth/token/"
 TIKTOK_USER_URL = "https://open.tiktokapis.com/v2/user/info/"
 TIKTOK_UPLOAD_INIT_URL = "https://open.tiktokapis.com/v2/post/publish/inbox/video/init/"
 TIKTOK_STATUS_URL = "https://open.tiktokapis.com/v2/post/publish/status/fetch/"
-REDIRECT_URI = "https://tiktok-posting.onrender.com/auth/tiktok/callback/"
+# Externally-facing origin used to build the OAuth redirect URI. In production this MUST be an
+# owned custom domain that does not contain "tiktok"; set EM_POSTING_PUBLIC_URL to it and register
+# the same value's /auth/tiktok/callback/ path as the Login Kit Redirect URI in the developer
+# portal. The Render URL below is only a documented Sandbox/local verification fallback.
+PUBLIC_URL_FALLBACK = "https://tiktok-posting.onrender.com"
+CALLBACK_PATH = "/auth/tiktok/callback/"
 SCOPES = "user.info.basic,video.upload"
 SESSION_COOKIE = "em_tiktok_session"
 OAUTH_COOKIE = "em_tiktok_oauth"
@@ -82,6 +87,19 @@ def _env(name: str) -> str:
     return value
 
 
+def public_base_url() -> str:
+    """Externally-facing origin. Prefers EM_POSTING_PUBLIC_URL (the owned production domain);
+    falls back to the documented Render URL for Sandbox/local verification."""
+    configured = os.getenv("EM_POSTING_PUBLIC_URL", "").strip().rstrip("/")
+    return configured or PUBLIC_URL_FALLBACK
+
+
+def redirect_uri() -> str:
+    """OAuth callback URI. Must exactly match the Login Kit Redirect URI registered in the portal,
+    so it is derived from the configured public origin rather than a request header."""
+    return f"{public_base_url()}{CALLBACK_PATH}"
+
+
 def _client_key() -> str:
     return _env("SANDBOX_TIKTOK_CLIENT_KEY")
 
@@ -122,7 +140,7 @@ async def login_with_tiktok() -> RedirectResponse:
             "client_key": _client_key(),
             "scope": SCOPES,
             "response_type": "code",
-            "redirect_uri": REDIRECT_URI,
+            "redirect_uri": redirect_uri(),
             "state": state,
             "disable_auto_auth": "1",
         }
@@ -166,7 +184,7 @@ async def tiktok_callback(
                 "client_secret": _client_secret(),
                 "code": code,
                 "grant_type": "authorization_code",
-                "redirect_uri": REDIRECT_URI,
+                "redirect_uri": redirect_uri(),
             },
             headers={"Content-Type": "application/x-www-form-urlencoded"},
         )

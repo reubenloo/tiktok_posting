@@ -80,7 +80,9 @@ async def proxy_http(request: Request, path: str):
     target = f"{STREAMLIT_HTTP}/{path}"
     headers = dict(request.headers)
     headers.pop("host", None)
-    headers["x-em-posting-origin"] = str(request.base_url).rstrip("/")
+    forwarded_proto = request.headers.get("x-forwarded-proto", "https")
+    forwarded_host = request.headers.get("x-forwarded-host") or request.headers.get("host", "")
+    headers["x-em-posting-origin"] = f"{forwarded_proto}://{forwarded_host}"
     body = await request.body()
     client = httpx.AsyncClient(timeout=None, follow_redirects=False)
     upstream = await client.send(

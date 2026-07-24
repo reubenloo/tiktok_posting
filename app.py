@@ -1,5 +1,6 @@
 import hashlib
 import json
+import os
 from datetime import UTC, datetime
 from pathlib import Path
 from textwrap import dedent
@@ -7,13 +8,15 @@ from textwrap import dedent
 import streamlit as st
 import httpx
 
-APP_VERSION = "v0.9.2"
+APP_VERSION = "v0.10.0"
 APP_NAME = "EM Posting"
 TAGLINE = "One calm place to take a finished video from final cut to an approved TikTok draft."
 
-# Public demo home. The domain shown in a submission demo video must match this URL.
-WEBSITE_URL = "https://tiktok-posting.onrender.com"
-WEBSITE_DOMAIN = "tiktok-posting.onrender.com"
+# Externally-facing origin for browser links (Home, legal, sign-in). Production must set
+# EM_POSTING_PUBLIC_URL to an owned custom domain that does not contain "tiktok"; this Render URL
+# is only a documented Sandbox/local verification fallback. Do not hard-code it anywhere else.
+PUBLIC_URL_FALLBACK = "https://tiktok-posting.onrender.com"
+CONTACT_EMAIL = "eczemamitten@gmail.com"
 
 # Creator post limit. TikTok developer-form limits belong in README, not the product UI.
 CAPTION_MAX = 2200
@@ -233,6 +236,26 @@ def version_caption():
     st.caption(f"{APP_VERSION} · creator publishing workspace · TikTok Sandbox")
 
 
+def configured_public_url():
+    """Configured externally-facing origin: EM_POSTING_PUBLIC_URL, else the documented fallback."""
+    configured = os.getenv("EM_POSTING_PUBLIC_URL", "").strip().rstrip("/")
+    return configured or PUBLIC_URL_FALLBACK
+
+
+def public_base_url():
+    """Configured public origin for all browser-facing links and OAuth entry points.
+
+    This deliberately does not use the incoming request host: Login Kit sets its state cookie on
+    the sign-in origin, so it must match the environment-derived callback origin exactly.
+    """
+    return configured_public_url()
+
+
+def legal_url(policy):
+    """Public URL for a directly linkable legal page (policy is 'terms' or 'privacy')."""
+    return f"{public_base_url()}/?page=legal&policy={policy}"
+
+
 def backend_origin():
     forwarded = st.context.headers.get("x-em-posting-origin")
     return forwarded or "http://127.0.0.1:10000"
@@ -382,12 +405,74 @@ def render_home():
             <div class="card">
               <span class="pill pill-ok">● Creator control</span>
               <h3>Final editing stays in TikTok</h3>
-              <p>The intended integration uploads to the draft flow only. Publishing, scheduling,
+              <p>The integration uploads to the draft/inbox flow only. Publishing, scheduling,
               and final edits always happen inside TikTok, by the creator.</p>
             </div>
             """,
             unsafe_allow_html=True,
         )
+
+    st.markdown("## What EM Posting does — and does not — do")
+    does, does_not = st.columns(2)
+    with does:
+        st.markdown(
+            """
+            <div class="card">
+              <h3>What it does</h3>
+              <p>
+              • Signs a creator in with TikTok Login Kit (<code>user.info.basic</code>).<br>
+              • Lets a creator review one finished MP4 and its description.<br>
+              • Requires an explicit, per-video approval before any transfer.<br>
+              • Uploads that single approved MP4 to TikTok drafts with <code>video.upload</code>.<br>
+              • Shows a receipt with TikTok's real publish ID and delivery status.
+              </p>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+    with does_not:
+        st.markdown(
+            """
+            <div class="card">
+              <h3>What it does not do</h3>
+              <p>
+              • It does not publish or schedule posts directly to a public feed.<br>
+              • It does not bulk-post, auto-post, or automate engagement.<br>
+              • It does not scrape TikTok data or read messages, comments, or followers.<br>
+              • It does not sell personal information.<br>
+              • It does not store uploaded videos beyond the active session.
+              </p>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+    st.markdown("## Trust & transparency")
+    st.write(
+        "EM Posting is operated as a small creator pilot. The full Terms of Service and Privacy "
+        "Policy are public and directly linkable below — no sign-in or menu navigation required. "
+        f"Product and policy questions can be sent to {CONTACT_EMAIL}."
+    )
+    terms_col, privacy_col, contact_col = st.columns(3)
+    with terms_col:
+        st.link_button("Terms of Service", legal_url("terms"), use_container_width=True)
+    with privacy_col:
+        st.link_button("Privacy Policy", legal_url("privacy"), use_container_width=True)
+    with contact_col:
+        st.link_button("Contact", f"mailto:{CONTACT_EMAIL}", use_container_width=True)
+
+    st.markdown(
+        f"""
+        <hr style="border:none;border-top:1px solid var(--line);margin:2rem 0 1rem;">
+        <div class="note">
+          © 2026 EM Posting · Creator publishing workspace ·
+          <a href="{legal_url('terms')}">Terms of Service</a> ·
+          <a href="{legal_url('privacy')}">Privacy Policy</a> ·
+          <a href="mailto:{CONTACT_EMAIL}">{CONTACT_EMAIL}</a>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
 
 # ------------------------------------------------------------------------- Studio
@@ -522,7 +607,7 @@ def render_publish():
                 st.rerun()
     else:
         st.info("Connect TikTok before uploading. TikTok will ask for user.info.basic and video.upload consent.")
-        st.link_button("Connect with TikTok", f"{WEBSITE_URL}/auth/tiktok/login", type="primary", use_container_width=True)
+        st.link_button("Connect with TikTok", f"{public_base_url()}/auth/tiktok/login", type="primary", use_container_width=True)
 
     a, b, c = st.columns(3)
     for col, label, value in [
@@ -665,10 +750,10 @@ def render_legal():
     policy = st.query_params.get("policy")
     if policy == "terms":
         st.markdown(TERMS)
-        st.link_button("View Privacy Policy", f"{WEBSITE_URL}/?page=legal&policy=privacy")
+        st.link_button("View Privacy Policy", legal_url("privacy"))
     elif policy == "privacy":
         st.markdown(PRIVACY)
-        st.link_button("View Terms of Service", f"{WEBSITE_URL}/?page=legal&policy=terms")
+        st.link_button("View Terms of Service", legal_url("terms"))
     else:
         terms_tab, privacy_tab = st.tabs(["Terms of Service", "Privacy Policy"])
         with terms_tab:

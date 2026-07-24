@@ -69,6 +69,66 @@ def test_tiktok_status_copy_does_not_claim_inbox_before_delivery():
     assert "frame_rate_check_failed" in failed
 
 
+def load_app_nodes(*names):
+    """Exec selected top-level assignments/functions from app.py in an isolated namespace."""
+    module = ast.parse(Path("app.py").read_text())
+    wanted = []
+    for node in module.body:
+        if isinstance(node, ast.FunctionDef) and node.name in names:
+            wanted.append(node)
+        elif isinstance(node, ast.Assign) and any(
+            isinstance(target, ast.Name) and target.id in names for target in node.targets
+        ):
+            wanted.append(node)
+    namespace = {"os": os}
+    exec(compile(ast.Module(body=wanted, type_ignores=[]), "app.py", "exec"), namespace)
+    return namespace
+
+
+def test_configured_public_url_prefers_env_over_fallback():
+    namespace = load_app_nodes("PUBLIC_URL_FALLBACK", "configured_public_url")
+    configured_public_url = namespace["configured_public_url"]
+    with patch.dict(os.environ, {"EM_POSTING_PUBLIC_URL": "https://posting.example.com/"}):
+        assert configured_public_url() == "https://posting.example.com"
+    os.environ.pop("EM_POSTING_PUBLIC_URL", None)
+    assert configured_public_url() == namespace["PUBLIC_URL_FALLBACK"]
+
+
+def test_public_links_use_configured_origin_not_request_host():
+    namespace = load_app_nodes(
+        "PUBLIC_URL_FALLBACK", "configured_public_url", "public_base_url", "legal_url"
+    )
+    with patch.dict(os.environ, {"EM_POSTING_PUBLIC_URL": "https://posting.example.com"}):
+        assert namespace["public_base_url"]() == "https://posting.example.com"
+        assert namespace["legal_url"]("terms") == (
+            "https://posting.example.com/?page=legal&policy=terms"
+        )
+
+
+def test_home_exposes_public_terms_and_privacy_links_without_menu():
+    source = Path("app.py").read_text()
+    module = ast.parse(source)
+    home = next(
+        node
+        for node in module.body
+        if isinstance(node, ast.FunctionDef) and node.name == "render_home"
+    )
+    home_source = ast.get_source_segment(source, home)
+    # Terms and Privacy must be directly linkable from the Home page itself.
+    assert 'legal_url("terms")' in home_source
+    assert 'legal_url("privacy")' in home_source
+    assert "Terms of Service" in home_source
+    assert "Privacy Policy" in home_source
+
+
+def test_no_hardcoded_tiktok_hostname_outside_documented_fallback():
+    # The old onrender host must not be baked into legal links, sign-in links, or the OAuth redirect.
+    app_source = Path("app.py").read_text()
+    integration_source = Path("tiktok_integration.py").read_text()
+    assert app_source.count("tiktok-posting.onrender.com") == 1
+    assert integration_source.count("tiktok-posting.onrender.com") == 1
+
+
 class FakeResponse:
     def __init__(self, payload=None, status_code=200):
         self._payload = payload or {}
@@ -116,12 +176,33 @@ def make_session(session_id, scopes="user.info.basic,video.upload"):
 
 
 def test_login_sets_state_cookie_and_requests_narrow_scopes():
-    client = TestClient(app)
-    response = client.get("/auth/tiktok/login", follow_redirects=False)
+    # With EM_POSTING_PUBLIC_URL unset, the redirect falls back to the documented Render URL.
+    with patch.dict(os.environ, {}, clear=False):
+        os.environ.pop("EM_POSTING_PUBLIC_URL", None)
+        client = TestClient(app)
+        response = client.get("/auth/tiktok/login", follow_redirects=False)
     assert response.status_code == 302
     assert "scope=user.info.basic%2Cvideo.upload" in response.headers["location"]
     assert "redirect_uri=https%3A%2F%2Ftiktok-posting.onrender.com%2Fauth%2Ftiktok%2Fcallback%2F" in response.headers["location"]
     assert ti.OAUTH_COOKIE in response.cookies
+
+
+def test_public_base_url_prefers_configured_domain_over_fallback():
+    with patch.dict(os.environ, {"EM_POSTING_PUBLIC_URL": "https://posting.example.com/"}):
+        assert ti.public_base_url() == "https://posting.example.com"
+        assert ti.redirect_uri() == "https://posting.example.com/auth/tiktok/callback/"
+    os.environ.pop("EM_POSTING_PUBLIC_URL", None)
+    assert ti.public_base_url() == ti.PUBLIC_URL_FALLBACK
+    assert ti.redirect_uri() == f"{ti.PUBLIC_URL_FALLBACK}/auth/tiktok/callback/"
+
+
+def test_login_uses_configured_public_domain_for_redirect_uri():
+    with patch.dict(os.environ, {"EM_POSTING_PUBLIC_URL": "https://posting.example.com"}):
+        client = TestClient(app)
+        response = client.get("/auth/tiktok/login", follow_redirects=False)
+    assert response.status_code == 302
+    assert "redirect_uri=https%3A%2F%2Fposting.example.com%2Fauth%2Ftiktok%2Fcallback%2F" in response.headers["location"]
+    assert "tiktok-posting.onrender.com" not in response.headers["location"]
 
 
 def test_session_status_exposes_profile_not_tokens():
