@@ -121,12 +121,20 @@ def test_home_exposes_public_terms_and_privacy_links_without_menu():
     assert "Privacy Policy" in home_source
 
 
-def test_no_hardcoded_tiktok_hostname_outside_documented_fallback():
-    # The old onrender host must not be baked into legal links, sign-in links, or the OAuth redirect.
+def test_production_render_domain_is_the_only_fallback():
+    # Legal links, sign-in links, and OAuth redirect derive from this non-branded Render fallback.
     app_source = Path("app.py").read_text()
     integration_source = Path("tiktok_integration.py").read_text()
-    assert app_source.count("tiktok-posting.onrender.com") == 1
-    assert integration_source.count("tiktok-posting.onrender.com") == 1
+    assert app_source.count("posting-app-gvtf.onrender.com") == 1
+    assert integration_source.count("posting-app-gvtf.onrender.com") == 1
+    assert "tiktok-posting.onrender.com" not in app_source
+    assert "tiktok-posting.onrender.com" not in integration_source
+
+
+def test_public_contact_email_is_used_in_app_and_legal_copy():
+    app_source = Path("app.py").read_text()
+    assert "contact@eczemamitten.com" in app_source
+    assert "eczemamitten@gmail.com" not in app_source
 
 
 class FakeResponse:
@@ -176,14 +184,14 @@ def make_session(session_id, scopes="user.info.basic,video.upload"):
 
 
 def test_login_sets_state_cookie_and_requests_narrow_scopes():
-    # With EM_POSTING_PUBLIC_URL unset, the redirect falls back to the documented Render URL.
+    # With EM_POSTING_PUBLIC_URL unset, the redirect uses the documented production Render URL.
     with patch.dict(os.environ, {}, clear=False):
         os.environ.pop("EM_POSTING_PUBLIC_URL", None)
         client = TestClient(app)
         response = client.get("/auth/tiktok/login", follow_redirects=False)
     assert response.status_code == 302
     assert "scope=user.info.basic%2Cvideo.upload" in response.headers["location"]
-    assert "redirect_uri=https%3A%2F%2Ftiktok-posting.onrender.com%2Fauth%2Ftiktok%2Fcallback%2F" in response.headers["location"]
+    assert "redirect_uri=https%3A%2F%2Fposting-app-gvtf.onrender.com%2Fauth%2Ftiktok%2Fcallback%2F" in response.headers["location"]
     assert ti.OAUTH_COOKIE in response.cookies
 
 
@@ -192,8 +200,8 @@ def test_public_base_url_prefers_configured_domain_over_fallback():
         assert ti.public_base_url() == "https://posting.example.com"
         assert ti.redirect_uri() == "https://posting.example.com/auth/tiktok/callback/"
     os.environ.pop("EM_POSTING_PUBLIC_URL", None)
-    assert ti.public_base_url() == ti.PUBLIC_URL_FALLBACK
-    assert ti.redirect_uri() == f"{ti.PUBLIC_URL_FALLBACK}/auth/tiktok/callback/"
+    assert ti.public_base_url() == "https://posting-app-gvtf.onrender.com"
+    assert ti.redirect_uri() == "https://posting-app-gvtf.onrender.com/auth/tiktok/callback/"
 
 
 def test_login_uses_configured_public_domain_for_redirect_uri():

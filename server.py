@@ -19,7 +19,7 @@ from fastapi.responses import PlainTextResponse, StreamingResponse
 from tiktok_integration import router as tiktok_router
 
 ROOT = Path(__file__).resolve().parent
-VERIFICATION_FILENAME = "tiktokn4FgVVIg3PMCSpkEskVM1xXLvescL2S3.txt"
+VERIFICATION_FILENAME = "tiktok8i8uszpdFElTqWKuJjxT8oFX5Gwx8T6z.txt"
 VERIFICATION_TEXT = (ROOT / VERIFICATION_FILENAME).read_text(encoding="utf-8").strip()
 STREAMLIT_HOST = "127.0.0.1"
 STREAMLIT_PORT = 8502

@@ -24,7 +24,7 @@ TIKTOK_STATUS_URL = "https://open.tiktokapis.com/v2/post/publish/status/fetch/"
 # owned custom domain that does not contain "tiktok"; set EM_POSTING_PUBLIC_URL to it and register
 # the same value's /auth/tiktok/callback/ path as the Login Kit Redirect URI in the developer
 # portal. The Render URL below is only a documented Sandbox/local verification fallback.
-PUBLIC_URL_FALLBACK = "https://tiktok-posting.onrender.com"
+PUBLIC_URL_FALLBACK = "https://posting-app-gvtf.onrender.com"
 CALLBACK_PATH = "/auth/tiktok/callback/"
 SCOPES = "user.info.basic,video.upload"
 SESSION_COOKIE = "em_tiktok_session"

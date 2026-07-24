@@ -23,8 +23,7 @@ It is not a mass publisher, engagement bot, scraper, autonomous spam tool, or di
 - The bundled sample MP4 is a generated public demo asset and contains no private footage.
 - The externally-facing origin (Home, Terms, Privacy, sign-in link, and the OAuth redirect URI) is
   derived from the `EM_POSTING_PUBLIC_URL` environment variable. When it is unset, the app falls
-  back to `https://tiktok-posting.onrender.com` **only** for Sandbox and local verification. No
-  production hostname is hard-coded anywhere in the source.
+  back to `https://posting-app-gvtf.onrender.com`, the current production Render domain.
 
 ## TikTok submission fields
 
@@ -44,7 +43,7 @@ EM Posting uses Login Kit and TikTok's Content Posting API to upload one creator
 - **Scope:** `video.upload`
 - **Mode:** the app uploads a single creator-approved video to the TikTok draft/inbox flow; it does not publish directly.
 - **First-time review:** demonstrate the real Login Kit authorization and draft upload using an authorized Sandbox target user.
-- **Website domain:** the domain shown in the demo video must match the submitted Website, Terms, and Privacy URLs. For a production resubmission this must be an owned custom domain that does **not** contain the word "tiktok" (see **Production domain** below). The `tiktok-posting.onrender.com` fallback is for Sandbox/local verification only.
+- **Website domain:** the domain shown in the demo video must match the submitted Website, Terms, and Privacy URLs. The production Render domain is `posting-app-gvtf.onrender.com`.
 
 EM Posting does not need follower data, analytics, direct messages, comments, or broad account-management permissions.
 
@@ -100,42 +99,26 @@ In Render's **New Web Service** form, use:
 
 Render reads `.python-version` and uses Python 3.12. The `render.yaml` file provides the same settings for a Render Blueprint.
 
-## Production domain (required for TikTok App Review resubmission)
+## Production domain and resubmission
 
-TikTok's production review rejected the earlier Website, Terms, and Privacy URLs because the
-`tiktok-posting.onrender.com` hostname contains the word "tiktok". Third-party apps may not present
-TikTok's brand in their own domain. The Render fallback therefore stays valid for Sandbox and local
-verification, but a production resubmission needs an owned custom domain that does not contain
-"tiktok". The application code is already domain-agnostic — every externally-facing URL is derived
-from `EM_POSTING_PUBLIC_URL` — so the remaining work is deployment and portal configuration:
+Production uses `https://posting-app-gvtf.onrender.com`, which does not contain TikTok branding.
+Set `EM_POSTING_PUBLIC_URL=https://posting-app-gvtf.onrender.com` in the Render service Environment
+and redeploy. The app then uses that same origin for Home, Terms, Privacy, sign-in, and the OAuth
+`redirect_uri`.
 
-1. **Register/point an owned custom domain** (for example `emposting.com` or `app.emposting.com`)
-   that does not contain the word "tiktok".
-2. **Attach the domain to the Render service:** Render dashboard → the `em-posting` service →
-   *Settings → Custom Domains → Add Custom Domain* → enter the domain → create the DNS record Render
-   shows (a `CNAME` to the Render host for a subdomain, or the `A`/`ALIAS` records for an apex
-   domain) with your DNS provider → wait for Render to verify and issue the TLS certificate.
-3. **Set `EM_POSTING_PUBLIC_URL`** on the Render service (*Environment* tab) to the exact HTTPS
-   origin, with no trailing path — e.g. `https://app.emposting.com`. Redeploy so the new value takes
-   effect. From this point the app serves Home, Terms, Privacy, the sign-in link, and the OAuth
-   `redirect_uri` from that origin.
-4. **Update the TikTok developer portal** (Sandbox first, then Production) to the same domain:
-   - **Website URL:** `https://app.emposting.com/`
-   - **Terms of Service URL:** `https://app.emposting.com/?page=legal&policy=terms`
-   - **Privacy Policy URL:** `https://app.emposting.com/?page=legal&policy=privacy`
-   - **Login Kit → Redirect URI:** `https://app.emposting.com/auth/tiktok/callback/`
-     (must match `EM_POSTING_PUBLIC_URL` + `/auth/tiktok/callback/` exactly, including the trailing
-     slash).
-5. **Re-verify each URL property.** Re-run TikTok's domain verification: serve the verification file
-   at `https://app.emposting.com/tiktokn4FgVVIg3PMCSpkEskVM1xXLvescL2S3.txt` (the app already serves
-   it at the site root) and confirm the portal marks the Website, Terms, and Privacy URLs as
-   verified/reachable. Replace the verification filename/token if the portal issues a new one for the
-   new domain.
-6. **Re-record the demo** on the new domain with the browser address bar visible, showing Home →
-   Studio → Publish (real Login Kit consent + draft upload) → Legal, then **resubmit** for review.
+Update TikTok Developer Portal (Sandbox first, then Production):
 
-Do not submit or claim approval until TikTok completes the review. This repository change only makes
-the app domain-ready; it does not create the domain, DNS, Render config, or portal state.
+- **Website URL:** `https://posting-app-gvtf.onrender.com/`
+- **Terms of Service URL:** `https://posting-app-gvtf.onrender.com/?page=legal&policy=terms`
+- **Privacy Policy URL:** `https://posting-app-gvtf.onrender.com/?page=legal&policy=privacy`
+- **Login Kit → Redirect URI:** `https://posting-app-gvtf.onrender.com/auth/tiktok/callback/`
+
+Re-verify the URL property using the exact file served at:
+
+`https://posting-app-gvtf.onrender.com/tiktok8i8uszpdFElTqWKuJjxT8oFX5Gwx8T6z.txt`
+
+Then re-record the demo with this domain visible in the browser address bar and resubmit. Do not
+claim approval until TikTok completes review.
 
 ## Security notes
 

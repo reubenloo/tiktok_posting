@@ -8,15 +8,15 @@ from textwrap import dedent
 import streamlit as st
 import httpx
 
-APP_VERSION = "v0.10.0"
+APP_VERSION = "v0.10.1"
 APP_NAME = "EM Posting"
 TAGLINE = "One calm place to take a finished video from final cut to an approved TikTok draft."
 
 # Externally-facing origin for browser links (Home, legal, sign-in). Production must set
 # EM_POSTING_PUBLIC_URL to an owned custom domain that does not contain "tiktok"; this Render URL
 # is only a documented Sandbox/local verification fallback. Do not hard-code it anywhere else.
-PUBLIC_URL_FALLBACK = "https://tiktok-posting.onrender.com"
-CONTACT_EMAIL = "eczemamitten@gmail.com"
+PUBLIC_URL_FALLBACK = "https://posting-app-gvtf.onrender.com"
+CONTACT_EMAIL = "contact@eczemamitten.com"
 
 # Creator post limit. TikTok developer-form limits belong in README, not the product UI.
 CAPTION_MAX = 2200
@@ -73,7 +73,7 @@ TERMS = dedent(
     creator will complete or publish the post inside TikTok.
 
     ## Contact
-    Product and policy questions may be sent to eczemamitten@gmail.com while EM Posting is in its
+    Product and policy questions may be sent to contact@eczemamitten.com while EM Posting is in its
     initial creator pilot.
     """
 ).strip()
@@ -114,7 +114,7 @@ PRIVACY = dedent(
     included in the public source repository.
 
     ## Contact
-    Privacy questions may be sent to eczemamitten@gmail.com during the initial pilot.
+    Privacy questions may be sent to contact@eczemamitten.com during the initial pilot.
     """
 ).strip()
 
