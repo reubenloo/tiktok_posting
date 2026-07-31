@@ -21,6 +21,7 @@ from tiktok_integration import router as tiktok_router
 ROOT = Path(__file__).resolve().parent
 VERIFICATION_FILENAME = "tiktok8i8uszpdFElTqWKuJjxT8oFX5Gwx8T6z.txt"
 VERIFICATION_TEXT = (ROOT / VERIFICATION_FILENAME).read_text(encoding="utf-8").strip()
+APP_ICON_PATH = ROOT / "assets" / "em-posting-icon.png"
 STREAMLIT_HOST = "127.0.0.1"
 STREAMLIT_PORT = 8502
 STREAMLIT_HTTP = f"http://{STREAMLIT_HOST}:{STREAMLIT_PORT}"
@@ -73,6 +74,16 @@ app.include_router(tiktok_router)
 @app.get(f"/{VERIFICATION_FILENAME}", response_class=PlainTextResponse)
 async def tiktok_verification():
     return PlainTextResponse(VERIFICATION_TEXT, media_type="text/plain")
+
+
+@app.get("/favicon.png")
+async def favicon():
+    return Response(APP_ICON_PATH.read_bytes(), media_type="image/png")
+
+
+@app.get("/app/static/assets/em-posting-icon.png")
+async def app_icon():
+    return Response(APP_ICON_PATH.read_bytes(), media_type="image/png")
 
 
 @app.api_route("/{path:path}", methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD"])

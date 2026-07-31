@@ -8,9 +8,10 @@ from textwrap import dedent
 import streamlit as st
 import httpx
 
-APP_VERSION = "v0.10.1"
+APP_VERSION = "v0.10.2"
 APP_NAME = "EM Posting"
 TAGLINE = "One calm place to take a finished video from final cut to an approved TikTok draft."
+APP_ICON_PATH = Path(__file__).parent / "assets" / "em-posting-icon.png"
 
 # Externally-facing origin for browser links (Home, legal, sign-in). Production must set
 # EM_POSTING_PUBLIC_URL to an owned custom domain that does not contain "tiktok"; this Render URL
@@ -120,7 +121,7 @@ PRIVACY = dedent(
 
 st.set_page_config(
     page_title=APP_NAME,
-    page_icon="✦",
+    page_icon=str(APP_ICON_PATH),
     layout="wide",
     initial_sidebar_state="expanded",
 )
@@ -144,7 +145,8 @@ st.markdown(
     h1,h2,h3 { letter-spacing:-.03em; color:var(--ink); }
     h1 { font-size:2.4rem !important; }
     .brand { font-size:1.14rem; font-weight:800; letter-spacing:-.03em; color:#fff; display:flex; align-items:center; }
-    .brand-mark { display:inline-grid; place-items:center; width:28px; height:28px; margin-right:9px; border-radius:9px; background:linear-gradient(135deg,#4f46e5,#8b7bff); color:#fff; }
+    .brand-mark { display:inline-block; width:28px; height:28px; margin-right:9px; border-radius:9px; vertical-align:-8px; }
+    .brand-mark img { display:block; width:28px; height:28px; border-radius:9px; }
     .ws-chip { margin-top:.8rem; padding:.7rem .78rem; border:1px solid rgba(255,255,255,.1); background:rgba(255,255,255,.05); border-radius:12px; color:#e7e7ec; font-size:.8rem; }
     .eyebrow { text-transform:uppercase; letter-spacing:.16em; font-size:.68rem; font-weight:800; color:var(--accent); margin-bottom:.55rem; }
     .hero { padding:2.3rem 2.4rem; border-radius:22px; color:#fff; background:linear-gradient(135deg,#17171f 0%,#2b2860 60%,#4f46e5 100%); box-shadow:0 24px 60px rgba(31,29,84,.16); }
@@ -773,7 +775,11 @@ if "nav" not in st.session_state:
     st.session_state.nav = "Legal" if requested_page == "legal" else "Home"
 
 with st.sidebar:
-    st.markdown('<div class="brand"><span class="brand-mark">✦</span>EM Posting</div>', unsafe_allow_html=True)
+    st.markdown(
+        '<div class="brand"><span class="brand-mark"><img src="/app/static/assets/em-posting-icon.png" '
+        'alt="EM Posting icon"></span>EM Posting</div>',
+        unsafe_allow_html=True,
+    )
     st.markdown(
         f'<div class="ws-chip"><b>{WORKSPACE}</b><br><span style="color:#a1a1aa">Creator workspace · Owner</span></div>',
         unsafe_allow_html=True,

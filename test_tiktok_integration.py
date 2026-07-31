@@ -137,6 +137,25 @@ def test_public_contact_email_is_used_in_app_and_legal_copy():
     assert "eczemamitten@gmail.com" not in app_source
 
 
+def test_one_branded_icon_is_used_for_page_config_and_sidebar():
+    source = Path("app.py").read_text()
+    assert 'APP_ICON_PATH = Path(__file__).parent / "assets" / "em-posting-icon.png"' in source
+    assert "page_icon=str(APP_ICON_PATH)" in source
+    assert 'src="/app/static/assets/em-posting-icon.png"' in source
+
+
+def test_favicon_and_visible_brand_mark_serve_the_same_asset():
+    icon = Path("assets/em-posting-icon.png").read_bytes()
+    client = TestClient(app)
+    favicon = client.get("/favicon.png")
+    visible_mark = client.get("/app/static/assets/em-posting-icon.png")
+    assert favicon.status_code == 200
+    assert favicon.headers["content-type"].startswith("image/png")
+    assert favicon.content == icon
+    assert visible_mark.status_code == 200
+    assert visible_mark.content == icon
+
+
 class FakeResponse:
     def __init__(self, payload=None, status_code=200):
         self._payload = payload or {}
