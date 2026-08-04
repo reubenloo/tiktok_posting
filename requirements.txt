@@ -7,4 +7,4 @@ httpx>=0.27,<1.0
 uvicorn>=0.30,<1.0
 itsdangerous>=2.2,<3.0
 python-multipart>=0.0.20,<1.0
-# em-posting v0.10.2 - unified EM Posting app icon, website mark, and favicon (rebuild marker)
+# em-posting v0.11.0 - developed workspace with project library, review workflow, activity log (rebuild marker)

@@ -2,12 +2,30 @@
 
 Creator publishing workspace for reviewing finished short-form videos and handing approved posts to TikTok drafts.
 
-EM Posting is a focused creator product with a real TikTok Sandbox integration. It demonstrates one review-first path from a finished video to an approved draft upload:
+EM Posting is a focused creator product with a real TikTok Sandbox integration. The workspace is fully usable without TikTok credentials — the TikTok connection is required only for the final handoff step.
 
-1. **Home** — a calm overview of the four-step workflow.
-2. **Studio** — select the bundled sample or upload a finished MP4, then review the account, write the description, and explicitly approve.
-3. **Publish** — connect an authorized TikTok Sandbox user and upload one approved MP4 to TikTok drafts.
-4. **Legal** — Terms of Service and Privacy Policy.
+## Public workspace features (no credentials required)
+
+The following features are publicly accessible without any login or TikTok authorization:
+
+1. **Home** — Project library dashboard with workspace stats, quick actions, and activity log
+2. **Review** — Full review workflow with project checklist, caption preparation, and approval flow
+3. **Studio** — Add new projects (sample or uploaded MP4) to the library
+4. **Legal** — Terms of Service and Privacy Policy
+
+A bundled sample project is included in the library, allowing any visitor to:
+- Open a project and preview the video
+- Complete the full review checklist
+- Prepare caption notes
+- Approve the project for handoff
+
+## TikTok handoff (authorized creators only)
+
+The final handoff step requires an authorized TikTok Sandbox account:
+
+1. **Handoff** — Connect TikTok and send approved projects to TikTok's draft/inbox flow
+
+This step uses Login Kit and the Content Posting API with the `video.upload` scope.
 
 ## Positioning
 
@@ -51,9 +69,9 @@ EM Posting does not need follower data, analytics, direct messages, comments, or
 
 A concise spoken 75–90 second walkthrough is recommended (a silent version also works):
 
-1. **Home** — establish EM Posting as a creator workspace.
-2. **Studio** — choose the bundled sample video, review the account and caption, complete every final check, and click **Approve for handoff**.
-3. **Publish** — connect the authorized Sandbox TikTok account and click **Upload to TikTok drafts**.
+1. **Home** — Show the project library dashboard with workspace stats, projects, and activity log.
+2. **Review** — Open a sample project, show the video preview, complete the checklist, and approve.
+3. **Handoff** — Connect the authorized Sandbox TikTok account and click **Upload to TikTok drafts**.
 4. Hold on the receipt showing TikTok's real publish ID, then show the TikTok inbox notification.
 5. Briefly show the **Legal** page (Terms and Privacy).
 
@@ -71,18 +89,31 @@ Recording rules:
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
+python server.py
+```
+
+Then open `http://localhost:10000` in a browser. The server runs Streamlit internally and serves the full workspace.
+
+For Streamlit-only development (without the FastAPI proxy):
+
+```bash
 streamlit run streamlit_app.py
 ```
 
 Python 3.12 is expected (see `.python-version` and `runtime.txt`).
 
-## Deploy to Streamlit Community Cloud
+### Running tests
 
-- Repository: `reubenloo/tiktok_posting`
-- Branch: `main`
-- Main file path: `streamlit_app.py` (it executes `app.py` via `runpy` on every script run)
-- Python: select Python 3.12 in Streamlit Cloud settings if available
-- No secrets required for the public demo
+```bash
+pip install pytest
+pytest test_tiktok_integration.py -v
+```
+
+Tests verify:
+- Public workspace functionality (project library, review checklist, activity log)
+- TikTok integration endpoints (session, upload, status)
+- Favicon and icon consistency
+- Legal page accessibility
 
 ## Deploy to Render
 
@@ -94,7 +125,7 @@ In Render's **New Web Service** form, use:
 - **Branch:** `main`
 - **Build Command:** `pip install -r requirements.txt`
 - **Start Command:** `python server.py`
-- **Instance Type:** Free is sufficient for the public demo (expect a cold start after inactivity)
+- **Instance Type:** Free is sufficient for the public workspace (expect a cold start after inactivity)
 - **Environment Variables:** `SANDBOX_TIKTOK_CLIENT_KEY`, `SANDBOX_TIKTOK_CLIENT_SECRET`, `SANDBOX_TIKTOK_SESSION_SECRET`, and `EM_POSTING_PUBLIC_URL` (set to your public origin; required for a production custom domain, optional for the Sandbox fallback)
 
 Render reads `.python-version` and uses Python 3.12. The `render.yaml` file provides the same settings for a Render Blueprint.
@@ -119,6 +150,19 @@ Re-verify the URL property using the exact file served at:
 
 Then re-record the demo with this domain visible in the browser address bar and resubmit. Do not
 claim approval until TikTok completes review.
+
+## What's publicly usable without credentials
+
+- **Home:** Full project library dashboard with stats, quick actions, activity log
+- **Review:** Complete review workflow for any project (sample or uploaded)
+- **Studio:** Add videos to the library (sample or upload)
+- **Legal:** Terms and Privacy pages
+
+## What requires TikTok authorization
+
+- **Handoff → Upload to TikTok drafts:** Requires connected TikTok Sandbox account
+
+The workspace workflow is designed so reviewers can fully explore the product functionality without any test credentials. The TikTok authorization step is an explicit, optional connection for creators who want to use the handoff feature.
 
 ## Security notes
 
