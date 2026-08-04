@@ -4,6 +4,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from fastapi.testclient import TestClient
+from streamlit.testing.v1 import AppTest
 
 os.environ.setdefault("SANDBOX_TIKTOK_CLIENT_KEY", "sandbox-key")
 os.environ.setdefault("SANDBOX_TIKTOK_CLIENT_SECRET", "sandbox-secret")
@@ -315,7 +316,7 @@ def test_status_error_is_not_reported_as_success():
 def test_app_version_is_current():
     """Verify APP_VERSION reflects the current release."""
     namespace = load_app_nodes("APP_VERSION")
-    assert namespace["APP_VERSION"] == "v0.11.0"
+    assert namespace["APP_VERSION"] == "v0.11.1"
 
 
 def test_sample_projects_function_returns_project_library():
@@ -330,13 +331,64 @@ def test_sample_projects_function_returns_project_library():
     namespace = {}
     exec(compile(ast.Module(body=[get_sample_projects], type_ignores=[]), "app.py", "exec"), namespace)
     projects = namespace["get_sample_projects"]()
-    assert len(projects) >= 3
+    assert len(projects) == 1
     for proj in projects:
         assert "id" in proj
         assert "title" in proj
         assert "status" in proj
         assert "checks" in proj
         assert proj["status"] in ("ready", "in_review", "approved")
+        assert proj["filename"] == "founder-night-routine.mp4"
+        assert proj["duration"] == "00:08"
+
+
+def run_public_workspace():
+    return AppTest.from_file("app.py").run(timeout=20)
+
+
+def test_home_project_cta_navigates_without_widget_state_error():
+    app_test = run_public_workspace()
+    app_test.button[0].click().run(timeout=20)
+    assert not app_test.exception
+    assert app_test.session_state["nav"] == "Review"
+    assert app_test.session_state["current_project"] == "proj-001"
+
+
+def test_sample_project_can_be_approved_into_public_handoff_queue():
+    app_test = run_public_workspace()
+    app_test.button[0].click().run(timeout=20)
+    for checkbox in app_test.checkbox:
+        checkbox.set_value(True)
+    next(button for button in app_test.button if button.label == "Approve for handoff").click().run(timeout=20)
+    assert not app_test.exception
+    assert len(app_test.session_state["queue"]) == 1
+    queue_item = app_test.session_state["queue"][0]
+    assert queue_item["filename"] == "founder-night-routine.mp4"
+    assert queue_item["duration"] == "00:08"
+    assert queue_item["project_id"] == "proj-001"
+
+
+def test_uploaded_project_asset_is_previewable_and_queueable():
+    namespace = load_app_helpers("project_asset")
+    project_asset = namespace["project_asset"]
+    uploaded = {
+        "id": "uploaded-1",
+        "title": "Uploaded cut",
+        "filename": "uploaded-cut.mp4",
+        "size_mb": 0.5,
+        "duration": None,
+        "fingerprint": "upload-fingerprint",
+        "is_sample": False,
+        "video_data": b"mp4-bytes",
+    }
+    asset = project_asset(uploaded)
+    assert asset["filename"] == "uploaded-cut.mp4"
+    assert asset["video_data"] == b"mp4-bytes"
+    assert asset["source"] == "Direct upload"
+
+    source = Path("app.py").read_text()
+    assert 'st.video(project["video_data"], muted=True)' in source
+    assert "asset = project_asset(project)" in source
 
 
 def test_home_renders_project_library_section():

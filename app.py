@@ -8,7 +8,7 @@ from textwrap import dedent
 import streamlit as st
 import httpx
 
-APP_VERSION = "v0.11.0"
+APP_VERSION = "v0.11.1"
 APP_NAME = "EM Posting"
 TAGLINE = "One calm place to take a finished video from final cut to an approved TikTok draft."
 APP_ICON_PATH = Path(__file__).parent / "assets" / "em-posting-icon.png"
@@ -222,7 +222,9 @@ def deduplicate_queue(queue):
     return unique
 
 
-# Sample projects data - represents a realistic project library
+# Bundled sample-project records deliberately refer to the one shipped sample asset.  Do not add
+# cosmetic rows that claim different files or durations: every public project must preview and
+# hand off the asset named in its record.
 def get_sample_projects():
     return [
         {
@@ -240,36 +242,7 @@ def get_sample_projects():
             "checks": {"rights": False, "reviewed": False, "policy": False, "control": False, "consent": False},
             "is_sample": True,
         },
-        {
-            "id": "proj-002",
-            "title": "Morning coffee ritual",
-            "filename": "morning-coffee.mp4",
-            "duration": "00:12",
-            "size_mb": 0.18,
-            "creator": "Studio brand",
-            "status": "in_review",
-            "caption": "Starting the day with intention. This 3-minute ritual changed everything.",
-            "created": "2026-08-01 09:15 UTC",
-            "reviewed": True,
-            "approved": False,
-            "checks": {"rights": True, "reviewed": True, "policy": False, "control": False, "consent": False},
-            "is_sample": True,
-        },
-        {
-            "id": "proj-003",
-            "title": "Workspace tour 2026",
-            "filename": "workspace-tour.mp4",
-            "duration": "00:22",
-            "size_mb": 0.34,
-            "creator": "Personal creator",
-            "status": "approved",
-            "caption": "Where the magic happens. A quick tour of my creative workspace.",
-            "created": "2026-07-30 16:45 UTC",
-            "reviewed": True,
-            "approved": True,
-            "checks": {"rights": True, "reviewed": True, "policy": True, "control": True, "consent": True},
-            "is_sample": True,
-        },
+
     ]
 
 
@@ -284,12 +257,7 @@ def init_state():
         "projects": get_sample_projects(),
         "current_project": None,
         "activity_log": [
-            {"type": "create", "text": "Project 'Workspace tour 2026' added to library", "time": "16:45 UTC"},
-            {"type": "review", "text": "Started review of 'Workspace tour 2026'", "time": "16:52 UTC"},
-            {"type": "approve", "text": "'Workspace tour 2026' approved for handoff", "time": "17:03 UTC"},
-            {"type": "create", "text": "Project 'Morning coffee ritual' added to library", "time": "09:15 UTC"},
-            {"type": "review", "text": "Started review of 'Morning coffee ritual'", "time": "09:22 UTC"},
-            {"type": "create", "text": "Project 'A founder's night routine' added to library", "time": "14:30 UTC"},
+            {"type": "create", "text": "Sample project 'A founder's night routine' added to library", "time": "14:30 UTC"},
         ],
         "readiness_queue": [],
     }
@@ -419,7 +387,23 @@ def progress_strip():
 
 
 def goto(page):
-    st.session_state.nav = page
+    """Schedule navigation without mutating the sidebar widget state during a script run."""
+    st.session_state.pending_nav = page
+
+
+def project_asset(project):
+    """Return the precise asset data represented by a project, for preview and final handoff."""
+    if project.get("is_sample"):
+        return sample_asset()
+    return {
+        "filename": project["filename"],
+        "title": project["title"],
+        "size_mb": project["size_mb"],
+        "duration": project.get("duration"),
+        "fingerprint": project["fingerprint"],
+        "source": "Direct upload",
+        "video_data": project["video_data"],
+    }
 
 
 def add_activity(activity_type, text):
@@ -514,10 +498,16 @@ def render_home():
                 """,
                 unsafe_allow_html=True,
             )
-            if st.button("Open project", key=f"open_{project['id']}", use_container_width=True):
-                st.session_state.current_project = project["id"]
+            def open_project(project_id=project["id"]):
+                st.session_state.current_project = project_id
                 goto("Review")
-                st.rerun()
+
+            st.button(
+                "Open project",
+                key=f"open_{project['id']}",
+                use_container_width=True,
+                on_click=open_project,
+            )
 
     st.write("")
 
@@ -527,23 +517,15 @@ def render_home():
         st.markdown("## Quick actions")
         action_cols = st.columns(3)
         with action_cols[0]:
-            if st.button("📁 New project", use_container_width=True):
-                goto("Studio")
-                st.rerun()
+            st.button("📁 New project", use_container_width=True, on_click=goto, args=("Studio",))
         with action_cols[1]:
-            if st.button("✓ Review queue", use_container_width=True):
-                goto("Review")
-                st.rerun()
+            st.button("✓ Review queue", use_container_width=True, on_click=goto, args=("Review",))
         with action_cols[2]:
             session, _ = tiktok_session()
             if session:
-                if st.button("📤 Handoff ready", type="primary", use_container_width=True):
-                    goto("Handoff")
-                    st.rerun()
+                st.button("📤 Handoff ready", type="primary", use_container_width=True, on_click=goto, args=("Handoff",))
             else:
-                if st.button("🔗 Connect TikTok", use_container_width=True):
-                    goto("Handoff")
-                    st.rerun()
+                st.button("🔗 Connect TikTok", use_container_width=True, on_click=goto, args=("Handoff",))
 
         st.write("")
         st.markdown("### How it works")
@@ -674,18 +656,22 @@ def render_review():
                         st.markdown(f'{status_pill}<h3 style="margin-top:.4rem;">{proj["title"]}</h3>', unsafe_allow_html=True)
                         st.write(f'{proj["filename"]} · {proj["duration"]} · {proj["creator"]}')
                     with cols[1]:
-                        if st.button("Review this project", key=f"review_{proj['id']}", use_container_width=True):
-                            st.session_state.current_project = proj["id"]
-                            update_project(proj["id"], {"status": "in_review"})
-                            add_activity("review", f"Started review of '{proj['title']}'")
-                            st.rerun()
+                        def begin_review(project_id=proj["id"], project_title=proj["title"]):
+                            st.session_state.current_project = project_id
+                            update_project(project_id, {"status": "in_review"})
+                            add_activity("review", f"Started review of '{project_title}'")
+
+                        st.button(
+                            "Review this project",
+                            key=f"review_{proj['id']}",
+                            use_container_width=True,
+                            on_click=begin_review,
+                        )
         else:
             st.info("No projects need review. Add a new project from the Studio.")
 
         st.write("")
-        if st.button("← Back to workspace", use_container_width=False):
-            goto("Home")
-            st.rerun()
+        st.button("← Back to workspace", use_container_width=False, on_click=goto, args=("Home",))
         return
 
     # Project review interface
@@ -696,11 +682,12 @@ def render_review():
     with left:
         # Video preview
         st.markdown("#### Video preview")
-        if project.get("is_sample"):
-            if sample_path().exists():
-                st.video(str(sample_path()), muted=True)
-            else:
-                st.info("Sample video preview")
+        if project.get("is_sample") and sample_path().exists():
+            st.video(str(sample_path()), muted=True)
+        elif project.get("video_data"):
+            st.video(project["video_data"], muted=True)
+        else:
+            st.info("Video preview is unavailable for this project.")
         st.markdown(
             f"""
             <div class="card" style="margin-top:.5rem;">
@@ -773,17 +760,16 @@ def render_review():
                     add_activity("approve", f"'{project['title']}' approved for handoff")
 
                     # Add to handoff queue
-                    asset = sample_asset() if project.get("is_sample") else None
-                    if asset:
-                        item = {
-                            **asset,
-                            "account": creator,
-                            "caption": caption.strip(),
-                            "approved_at": utc_now(),
-                            "project_id": project["id"],
-                        }
-                        if not is_duplicate_approval(st.session_state.queue, asset):
-                            st.session_state.queue.insert(0, item)
+                    asset = project_asset(project)
+                    item = {
+                        **asset,
+                        "account": creator,
+                        "caption": caption.strip(),
+                        "approved_at": utc_now(),
+                        "project_id": project["id"],
+                    }
+                    if not is_duplicate_approval(st.session_state.queue, asset):
+                        st.session_state.queue.insert(0, item)
 
                     st.success("Project approved and added to the handoff queue.")
                     st.session_state.current_project = None
@@ -796,15 +782,14 @@ def render_review():
     st.write("")
     nav_cols = st.columns([1, 1, 1])
     with nav_cols[0]:
-        if st.button("← Back to library", use_container_width=True):
+        def back_to_library():
             st.session_state.current_project = None
             goto("Home")
-            st.rerun()
+
+        st.button("← Back to library", use_container_width=True, on_click=back_to_library)
     with nav_cols[2]:
         if project.get("status") == "approved":
-            if st.button("Go to Handoff →", type="primary", use_container_width=True):
-                goto("Handoff")
-                st.rerun()
+            st.button("Go to Handoff →", type="primary", use_container_width=True, on_click=goto, args=("Handoff",))
 
 
 # ------------------------------------------------------------------------- Studio
@@ -830,21 +815,20 @@ def render_studio():
             if uploaded is not None:
                 st.video(uploaded)
 
-        if st.button("Add to library", type="primary", use_container_width=True):
-            if source == "Sample library":
-                st.session_state.asset = sample_asset()
-                st.session_state.reviewed = True
-                # Add sample project if not already in library
-                existing_ids = [p["id"] for p in st.session_state.projects]
-                if "proj-001" not in existing_ids:
-                    st.session_state.projects.insert(0, get_sample_projects()[0])
-                add_activity("create", "Added 'A founder's night routine' to library")
-                st.success("Sample project ready for review.")
-                st.session_state.current_project = "proj-001"
-                goto("Review")
-                st.rerun()
+        def add_sample_project():
+            st.session_state.asset = sample_asset()
+            st.session_state.reviewed = True
+            existing_ids = [p["id"] for p in st.session_state.projects]
+            if "proj-001" not in existing_ids:
+                st.session_state.projects.insert(0, get_sample_projects()[0])
+            add_activity("create", "Added 'A founder's night routine' to library")
+            st.session_state.current_project = "proj-001"
+            goto("Review")
 
-            elif uploaded is None:
+        if source == "Sample library":
+            st.button("Add to library", type="primary", use_container_width=True, on_click=add_sample_project)
+        elif st.button("Add to library", type="primary", use_container_width=True):
+            if uploaded is None:
                 st.warning("Choose an MP4 to continue.")
             else:
                 data = uploaded.getvalue()
@@ -1122,6 +1106,8 @@ NAV_ITEMS = ["Home", "Review", "Studio", "Handoff", "Legal"]
 if "nav" not in st.session_state:
     requested_page = st.query_params.get("page", "home").lower()
     st.session_state.nav = "Legal" if requested_page == "legal" else "Home"
+if "pending_nav" in st.session_state:
+    st.session_state.nav = st.session_state.pop("pending_nav")
 
 with st.sidebar:
     st.markdown(
