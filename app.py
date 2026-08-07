@@ -8,7 +8,7 @@ from textwrap import dedent
 import streamlit as st
 import httpx
 
-APP_VERSION = "v0.11.1"
+APP_VERSION = "v0.11.2"
 APP_NAME = "EM Posting"
 TAGLINE = "One calm place to take a finished video from final cut to an approved TikTok draft."
 APP_ICON_PATH = Path(__file__).parent / "assets" / "em-posting-icon.png"

@@ -106,7 +106,11 @@ async def proxy_http(request: Request, path: str):
 
     async def body_stream():
         try:
-            async for chunk in upstream.aiter_raw():
+            # httpx decompresses based on the upstream Content-Encoding when we iterate
+            # decoded bytes. aiter_raw() would hand back the still-compressed wire bytes,
+            # which corrupts any gzip/br-encoded response (e.g. Streamlit's /media/*.png
+            # favicon route) once we've already stripped the Content-Encoding header above.
+            async for chunk in upstream.aiter_bytes():
                 yield chunk
         finally:
             await upstream.aclose()

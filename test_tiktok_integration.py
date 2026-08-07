@@ -316,7 +316,7 @@ def test_status_error_is_not_reported_as_success():
 def test_app_version_is_current():
     """Verify APP_VERSION reflects the current release."""
     namespace = load_app_nodes("APP_VERSION")
-    assert namespace["APP_VERSION"] == "v0.11.1"
+    assert namespace["APP_VERSION"] == "v0.11.2"
 
 
 def test_sample_projects_function_returns_project_library():
@@ -512,3 +512,32 @@ def test_health_endpoint_exists():
     # We just verify the server starts and responds
     response = client.get("/favicon.png")
     assert response.status_code == 200
+
+
+def test_proxy_decodes_compressed_upstream_responses():
+    """Regression test: the HTTP proxy must not forward raw compressed bytes
+    while claiming no Content-Encoding. This previously corrupted Streamlit's
+    gzip-encoded /media/*.png favicon route (browser saw undecodable gzip
+    magic bytes 1f 8b 08 instead of a PNG)."""
+    import gzip
+
+    import httpx
+
+    plain_body = b"\x89PNG\r\n\x1a\nfake-but-representative-png-bytes"
+    compressed_body = gzip.compress(plain_body)
+
+    async def fake_send(self, request, **kwargs):
+        return httpx.Response(
+            200,
+            headers={"content-type": "image/png", "content-encoding": "gzip"},
+            content=compressed_body,
+            request=request,
+        )
+
+    with patch("httpx.AsyncClient.send", new=fake_send):
+        client = TestClient(app)
+        response = client.get("/media/fake-hash.png")
+
+    assert response.status_code == 200
+    assert response.content == plain_body
+    assert response.content[:8] != b"\x1f\x8b\x08\x00\x00\x00\x00\x00"
