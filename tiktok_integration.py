@@ -133,18 +133,25 @@ def _error_detail(payload: dict[str, Any], fallback: str) -> str:
     return payload.get("error_description") or payload.get("message") or fallback
 
 
-def _popup_close_html(*, connected: bool, error: str | None = None) -> str:
+def _popup_close_html(*, connected: bool, error: str | None = None, handoff: str | None = None) -> str:
     """Tiny page rendered inside the OAuth popup window, never the main workspace tab.
 
     Posts the outcome to window.opener (same-origin, so this is safe) and closes itself. The
     opener is responsible for re-checking /api/tiktok/session and updating its own UI; this page
     never redirects anywhere so the workspace tab's Streamlit session is never touched.
+
+    The `handoff` value matters: st.context.cookies is a snapshot of the cookies sent on the
+    *initial* WebSocket request, so a cookie set later by this popup is invisible to the already
+    running workspace session. We therefore also hand the signed session id to the opener via
+    postMessage, so the app can forward it explicitly instead of relying on that stale snapshot.
     """
     safe_error = html.escape(error or "", quote=True)
     status_text = "TikTok connected. You can close this window." if connected else "TikTok connection failed."
-    message = {"source": "em-posting-tiktok-oauth", "connected": connected}
+    message: dict[str, Any] = {"source": "em-posting-tiktok-oauth", "connected": connected}
     if error:
         message["error"] = safe_error
+    if handoff:
+        message["handoff"] = handoff
     return f"""<!doctype html>
 <html><head><meta charset="utf-8"><title>EM Posting · TikTok</title>
 <style>
@@ -249,17 +256,19 @@ async def tiktok_callback(
         profile=profile_payload.get("data", {}).get("user", {}),
     )
     _save_sessions()
+    signed_session = _serializer().dumps(session_id)
     # This callback is opened in a popup window (see /auth/tiktok/login), not the main workspace
     # tab. Redirecting the popup to "/" would load a brand-new Streamlit session there and leave
-    # the real workspace tab none the wiser. Instead: set the session cookie (shared across tabs,
-    # since it's not tab-scoped), tell the opener via postMessage that TikTok is connected, and
-    # let the popup close itself. The opener polls /api/tiktok/session on that signal.
-    html = _popup_close_html(connected=True)
-    response = HTMLResponse(html)
+    # the real workspace tab none the wiser. Instead: set the session cookie, AND hand the signed
+    # session id to the opener via postMessage. The cookie alone is not enough -- Streamlit's
+    # st.context.cookies is frozen at the initial WebSocket request, so the already-running
+    # workspace session cannot see a cookie set after it loaded.
+    html_body = _popup_close_html(connected=True, handoff=signed_session)
+    response = HTMLResponse(html_body)
     response.delete_cookie(OAUTH_COOKIE, path="/")
     response.set_cookie(
         SESSION_COOKIE,
-        _serializer().dumps(session_id),
+        signed_session,
         max_age=60 * 60 * 24,
         **_cookie_options(),
     )

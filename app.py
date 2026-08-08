@@ -9,7 +9,7 @@ import streamlit as st
 import streamlit.components.v1 as st_components
 import httpx
 
-APP_VERSION = "v0.13.0"
+APP_VERSION = "v0.13.1"
 APP_NAME = "EM Posting"
 TAGLINE = "One calm place to take a finished video from final cut to an approved TikTok draft."
 APP_ICON_PATH = Path(__file__).parent / "assets" / "em-posting-icon.png"
@@ -317,7 +317,26 @@ def backend_origin():
 
 
 def backend_cookies():
-    return dict(st.context.cookies)
+    """Cookies to forward to the TikTok service.
+
+    st.context.cookies is only a snapshot of the cookies present on the *initial* WebSocket
+    request. When the OAuth popup sets the session cookie mid-session, this running script can
+    never see it -- which is why connecting used to appear to succeed while the app stayed stuck
+    on "not connected". The popup therefore also hands us the signed session id in-band (see
+    render_tiktok_oauth_bridge); when we have it, it wins over the stale snapshot.
+
+    The widget value is read straight out of session_state rather than from the return value of
+    the text input, because Streamlit applies incoming widget state *before* the script runs.
+    That means the token is readable no matter where on the page the bridge widgets render, so
+    this never depends on widget ordering.
+    """
+    cookies = dict(st.context.cookies)
+    token = st.session_state.get("tiktok_session_token") or st.session_state.get(
+        "tiktok_oauth_handoff"
+    )
+    if token:
+        cookies["em_tiktok_session"] = token
+    return cookies
 
 
 def backend_json(method, path, **kwargs):
@@ -370,12 +389,31 @@ def render_tiktok_connect_button(*, key, primary=False):
         <script>
           (function () {{
             var btn = document.getElementById("{component_id}-btn");
-            function syncParent() {{
+            function syncParent(handoff) {{
               try {{
-                var pingBtn = window.parent.document.querySelector(
-                  ".st-key-tiktok_oauth_sync_ping button"
-                );
-                if (pingBtn) pingBtn.click();
+                var doc = window.parent.document;
+                // Hand the signed session id to Streamlit through a hidden text input. A cookie
+                // set by the popup is invisible to this already-running session (st.context.cookies
+                // is a snapshot of the initial WebSocket request), so the token must travel in-band.
+                if (handoff) {{
+                  var input = doc.querySelector(
+                    ".st-key-tiktok_oauth_handoff input"
+                  );
+                  if (input) {{
+                    var setter = Object.getOwnPropertyDescriptor(
+                      window.parent.HTMLInputElement.prototype, "value"
+                    ).set;
+                    setter.call(input, handoff);
+                    input.dispatchEvent(new window.parent.Event("input", {{ bubbles: true }}));
+                    input.dispatchEvent(new window.parent.KeyboardEvent("keydown", {{
+                      bubbles: true, key: "Enter", code: "Enter", keyCode: 13, which: 13
+                    }}));
+                  }}
+                }}
+                setTimeout(function () {{
+                  var pingBtn = doc.querySelector(".st-key-tiktok_oauth_sync_ping button");
+                  if (pingBtn) pingBtn.click();
+                }}, 150);
               }} catch (e) {{ /* cross-origin or not mounted yet; safe to ignore */ }}
             }}
             btn.addEventListener("click", function () {{
@@ -396,13 +434,13 @@ def render_tiktok_connect_button(*, key, primary=False):
                 if (!event.data || event.data.source !== "em-posting-tiktok-oauth") return;
                 window.removeEventListener("message", handler);
                 reset();
-                syncParent();
+                syncParent(event.data.handoff);
               }});
               var poll = setInterval(function () {{
                 if (popup && popup.closed) {{
                   clearInterval(poll);
                   reset();
-                  syncParent();
+                  syncParent(null);
                 }}
               }}, 500);
             }});
@@ -413,19 +451,42 @@ def render_tiktok_connect_button(*, key, primary=False):
     )
 
 
-def render_tiktok_oauth_sync_ping():
-    """Hidden button the popup-connect component clicks to force a rerun after OAuth completes.
+def render_tiktok_oauth_bridge():
+    """Hidden controls the popup-connect component drives once OAuth completes.
 
-    Must be rendered once per page load wherever render_tiktok_connect_button might be used, so
-    the popup's postMessage handler always has a live button to find. Clicking it triggers a
-    normal Streamlit rerun with no URL/navigation change, so session_state survives untouched.
+    MUST be called before tiktok_session() on any page that offers a connect button, because the
+    handoff token it captures is what tiktok_session()'s request depends on.
+
+    Two pieces, both hidden:
+
+    * `tiktok_oauth_handoff` -- a text input the popup writes the signed session id into. This
+      exists because st.context.cookies only ever reflects cookies present on the *initial*
+      WebSocket request; a cookie the popup sets afterwards is invisible to this running session,
+      which is why simply re-reading cookies after connecting never worked.
+    * `tiktok_oauth_sync_ping` -- a button the popup clicks to force one ordinary Streamlit rerun
+      (no URL change, no reload), so session_state survives the whole flow untouched.
     """
     st.markdown(
-        '<style>.st-key-tiktok_oauth_sync_ping { position:absolute; width:1px; height:1px; '
-        "overflow:hidden; opacity:0; pointer-events:none; }</style>",
+        "<style>.st-key-tiktok_oauth_sync_ping, .st-key-tiktok_oauth_handoff "
+        "{ position:absolute; width:1px; height:1px; overflow:hidden; opacity:0; "
+        "pointer-events:none; }</style>",
         unsafe_allow_html=True,
     )
+    handoff = st.text_input(
+        "TikTok session handoff",
+        key="tiktok_oauth_handoff",
+        label_visibility="collapsed",
+    )
+    if handoff and handoff != st.session_state.get("tiktok_session_token"):
+        st.session_state["tiktok_session_token"] = handoff
     st.button("Sync TikTok connection", key="tiktok_oauth_sync_ping")
+
+
+def clear_tiktok_session_token():
+    """Forget the in-band session token on disconnect, so the UI does not stay falsely connected."""
+    st.session_state.pop("tiktok_session_token", None)
+    if "tiktok_oauth_handoff" in st.session_state:
+        st.session_state["tiktok_oauth_handoff"] = ""
 
 
 def should_show_empty_queue(queue, receipt):
@@ -693,12 +754,13 @@ def render_home():
         if session:
             if st.button("Disconnect TikTok", use_container_width=True):
                 backend_json("POST", "/api/tiktok/disconnect")
+                clear_tiktok_session_token()
                 st.rerun()
         else:
             render_tiktok_connect_button(key="home")
             st.caption("TikTok Sandbox · Login Kit")
 
-    render_tiktok_oauth_sync_ping()
+    render_tiktok_oauth_bridge()
 
     # Footer
     st.write("")
@@ -1048,6 +1110,7 @@ def render_handoff():
     page_header("Handoff", "Platform handoff", "Connect an authorized TikTok account and send approved projects to TikTok's inbox flow.")
     version_caption()
 
+    render_tiktok_oauth_bridge()
     session, _ = tiktok_session()
     st.markdown("## TikTok connection")
     if session:
@@ -1059,13 +1122,12 @@ def render_handoff():
         with right:
             if st.button("Disconnect TikTok", use_container_width=True):
                 backend_json("POST", "/api/tiktok/disconnect")
+                clear_tiktok_session_token()
                 st.rerun()
     else:
         st.info("Connect TikTok before uploading. TikTok will ask for user.info.basic and video.upload consent.")
         render_tiktok_connect_button(key="handoff", primary=True)
         st.caption("The full workspace workflow is usable without a connection. TikTok authorization is required only for the final handoff step.")
-
-    render_tiktok_oauth_sync_ping()
 
     a, b, c = st.columns(3)
     for col, label, value in [

@@ -279,6 +279,71 @@ def test_callback_error_from_tiktok_closes_popup_without_redirect():
     assert ti.SESSION_COOKIE not in response.cookies
 
 
+def test_callback_hands_session_id_to_opener_in_band():
+    """Regression: connecting appeared to succeed but the app stayed stuck on 'not connected'.
+
+    Root cause: st.context.cookies is a snapshot of the cookies on the *initial* WebSocket
+    request, so the session cookie the popup sets afterwards is invisible to the already-running
+    workspace session -- the rerun fired, but every backend call still went out unauthenticated.
+    The callback must therefore also deliver the signed session id in the postMessage payload so
+    the app can forward it explicitly. Assert the handoff token is present AND that it is the
+    same signed value as the cookie (i.e. it actually authenticates).
+    """
+    fake_client = FakeAsyncClient(
+        post_responses=[FakeResponse({"access_token": "tok-1", "open_id": "open-1", "scope": "user.info.basic,video.upload"})],
+        get_responses=[FakeResponse({"data": {"user": {"display_name": "Reuben"}}, "error": {"code": "ok"}})],
+    )
+    with patch.object(ti.httpx, "AsyncClient", return_value=fake_client):
+        client = TestClient(app)
+        login_response = client.get("/auth/tiktok/login", follow_redirects=False)
+        oauth_cookie = login_response.cookies[ti.OAUTH_COOKIE]
+        state = ti._serializer().loads(oauth_cookie, max_age=600)
+        response = client.get(
+            "/auth/tiktok/callback/",
+            params={"code": "auth-code", "state": state},
+            cookies={ti.OAUTH_COOKIE: oauth_cookie},
+            follow_redirects=False,
+        )
+    assert response.status_code == 200
+    assert "handoff" in response.text, "popup must hand the session id to the opener in-band"
+    signed_cookie = response.cookies[ti.SESSION_COOKIE]
+    assert signed_cookie in response.text, "in-band handoff token must match the session cookie"
+    # And that token must actually authenticate a subsequent request.
+    session_id = ti._serializer().loads(signed_cookie, max_age=60 * 60 * 24)
+    assert session_id in ti._sessions
+
+
+def test_app_forwards_in_band_token_over_stale_cookie_snapshot():
+    """The app must prefer the in-band handoff token over st.context.cookies.
+
+    Without this, backend_cookies() forwards only the frozen initial-request snapshot and the
+    freshly connected session is never seen -- the exact 'popup said connected but Post stayed
+    disabled' symptom.
+    """
+    source = Path("app.py").read_text()
+    module = ast.parse(source)
+    backend_cookies = next(
+        node
+        for node in module.body
+        if isinstance(node, ast.FunctionDef) and node.name == "backend_cookies"
+    )
+    body = ast.get_source_segment(source, backend_cookies) or ""
+    assert "tiktok_session_token" in body
+    assert "em_tiktok_session" in body
+    # The token is read from session_state, not from the widget's return value, so it works
+    # regardless of where the bridge renders on the page (Streamlit applies incoming widget
+    # state before the script runs). Ordering must NOT be a hidden requirement.
+    assert "st.session_state.get" in body
+    # Every page offering a connect button must render the bridge, or the popup has nothing
+    # to write the token into.
+    for page in ("render_home", "render_handoff"):
+        node = next(
+            n for n in module.body if isinstance(n, ast.FunctionDef) and n.name == page
+        )
+        page_source = ast.get_source_segment(source, node) or ""
+        assert "render_tiktok_oauth_bridge()" in page_source, f"{page} must render the OAuth bridge"
+
+
 def test_session_status_exposes_profile_not_tokens():
     ti._sessions["session-1"] = ti.TikTokSession(
         access_token="do-not-expose",
@@ -361,7 +426,7 @@ def test_status_error_is_not_reported_as_success():
 def test_app_version_is_current():
     """Verify APP_VERSION reflects the current release."""
     namespace = load_app_nodes("APP_VERSION")
-    assert namespace["APP_VERSION"] == "v0.13.0"
+    assert namespace["APP_VERSION"] == "v0.13.1"
 
 
 def test_sample_projects_function_returns_project_library():
