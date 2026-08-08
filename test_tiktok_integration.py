@@ -1,5 +1,6 @@
 import ast
 import os
+import textwrap
 from pathlib import Path
 from unittest.mock import patch
 
@@ -344,6 +345,38 @@ def test_app_forwards_in_band_token_over_stale_cookie_snapshot():
         assert "render_tiktok_oauth_bridge()" in page_source, f"{page} must render the OAuth bridge"
 
 
+def test_disconnect_does_not_write_to_an_instantiated_widget_key():
+    """Regression: clicking Disconnect raised StreamlitAPIException.
+
+    `tiktok_oauth_handoff` is a widget key, and Streamlit forbids assigning to a widget's key
+    after the widget has been instantiated -- which it always has by the time Disconnect is
+    reachable. clear_tiktok_session_token() must therefore never assign to it; it marks the value
+    consumed instead, and backend_cookies() ignores a consumed token.
+    """
+    source = Path("app.py").read_text()
+    module = ast.parse(source)
+    clear_fn = next(
+        n for n in module.body
+        if isinstance(n, ast.FunctionDef) and n.name == "clear_tiktok_session_token"
+    )
+    body = ast.get_source_segment(source, clear_fn) or ""
+    for node in ast.walk(ast.parse(textwrap.dedent(body))):
+        if isinstance(node, ast.Subscript) and isinstance(node.ctx, ast.Store):
+            key = getattr(node.slice, "value", None)
+            assert key != "tiktok_oauth_handoff", (
+                "clear_tiktok_session_token must not assign to the widget key "
+                "tiktok_oauth_handoff -- Streamlit raises StreamlitAPIException"
+            )
+    assert "tiktok_handoff_consumed" in body
+    cookies_fn = next(
+        n for n in module.body
+        if isinstance(n, ast.FunctionDef) and n.name == "backend_cookies"
+    )
+    assert "tiktok_handoff_consumed" in (ast.get_source_segment(source, cookies_fn) or ""), (
+        "backend_cookies must ignore a consumed handoff token"
+    )
+
+
 def test_session_status_exposes_profile_not_tokens():
     ti._sessions["session-1"] = ti.TikTokSession(
         access_token="do-not-expose",
@@ -426,7 +459,7 @@ def test_status_error_is_not_reported_as_success():
 def test_app_version_is_current():
     """Verify APP_VERSION reflects the current release."""
     namespace = load_app_nodes("APP_VERSION")
-    assert namespace["APP_VERSION"] == "v0.13.1"
+    assert namespace["APP_VERSION"] == "v0.13.2"
 
 
 def test_sample_projects_function_returns_project_library():

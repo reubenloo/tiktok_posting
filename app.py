@@ -9,7 +9,7 @@ import streamlit as st
 import streamlit.components.v1 as st_components
 import httpx
 
-APP_VERSION = "v0.13.1"
+APP_VERSION = "v0.13.2"
 APP_NAME = "EM Posting"
 TAGLINE = "One calm place to take a finished video from final cut to an approved TikTok draft."
 APP_ICON_PATH = Path(__file__).parent / "assets" / "em-posting-icon.png"
@@ -331,9 +331,12 @@ def backend_cookies():
     this never depends on widget ordering.
     """
     cookies = dict(st.context.cookies)
-    token = st.session_state.get("tiktok_session_token") or st.session_state.get(
-        "tiktok_oauth_handoff"
-    )
+    widget_token = st.session_state.get("tiktok_oauth_handoff")
+    # A widget key cannot be cleared after instantiation, so a disconnected token is recorded as
+    # "consumed" instead and ignored here.
+    if widget_token and widget_token == st.session_state.get("tiktok_handoff_consumed"):
+        widget_token = None
+    token = st.session_state.get("tiktok_session_token") or widget_token
     if token:
         cookies["em_tiktok_session"] = token
     return cookies
@@ -477,16 +480,26 @@ def render_tiktok_oauth_bridge():
         key="tiktok_oauth_handoff",
         label_visibility="collapsed",
     )
-    if handoff and handoff != st.session_state.get("tiktok_session_token"):
+    if (
+        handoff
+        and handoff != st.session_state.get("tiktok_handoff_consumed")
+        and handoff != st.session_state.get("tiktok_session_token")
+    ):
         st.session_state["tiktok_session_token"] = handoff
     st.button("Sync TikTok connection", key="tiktok_oauth_sync_ping")
 
 
 def clear_tiktok_session_token():
-    """Forget the in-band session token on disconnect, so the UI does not stay falsely connected."""
+    """Forget the in-band session token on disconnect, so the UI does not stay falsely connected.
+
+    Only the plain state key is cleared. Assigning to `tiktok_oauth_handoff` here would raise
+    StreamlitAPIException -- a widget's key cannot be written after the widget is instantiated,
+    and the bridge's text input has already rendered by the time Disconnect is clicked. Instead
+    the stale widget value is ignored via `tiktok_handoff_consumed`, which backend_cookies()
+    checks before trusting it.
+    """
     st.session_state.pop("tiktok_session_token", None)
-    if "tiktok_oauth_handoff" in st.session_state:
-        st.session_state["tiktok_oauth_handoff"] = ""
+    st.session_state["tiktok_handoff_consumed"] = st.session_state.get("tiktok_oauth_handoff") or ""
 
 
 def should_show_empty_queue(queue, receipt):
