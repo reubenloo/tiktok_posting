@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import hashlib
+import html
+import json
 import os
 import secrets
 from dataclasses import dataclass
@@ -12,7 +14,7 @@ from urllib.parse import urlencode
 
 import httpx
 from fastapi import APIRouter, Cookie, File, HTTPException, Request, UploadFile
-from fastapi.responses import JSONResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 
 TIKTOK_AUTHORIZE_URL = "https://www.tiktok.com/v2/auth/authorize/"
@@ -131,6 +133,43 @@ def _error_detail(payload: dict[str, Any], fallback: str) -> str:
     return payload.get("error_description") or payload.get("message") or fallback
 
 
+def _popup_close_html(*, connected: bool, error: str | None = None) -> str:
+    """Tiny page rendered inside the OAuth popup window, never the main workspace tab.
+
+    Posts the outcome to window.opener (same-origin, so this is safe) and closes itself. The
+    opener is responsible for re-checking /api/tiktok/session and updating its own UI; this page
+    never redirects anywhere so the workspace tab's Streamlit session is never touched.
+    """
+    safe_error = html.escape(error or "", quote=True)
+    status_text = "TikTok connected. You can close this window." if connected else "TikTok connection failed."
+    message = {"source": "em-posting-tiktok-oauth", "connected": connected}
+    if error:
+        message["error"] = safe_error
+    return f"""<!doctype html>
+<html><head><meta charset="utf-8"><title>EM Posting · TikTok</title>
+<style>
+  body {{ font-family: system-ui, sans-serif; background:#f6f5f1; color:#1a1a1f;
+          display:flex; align-items:center; justify-content:center; height:100vh; margin:0; }}
+  .box {{ text-align:center; padding:1.5rem 2rem; }}
+  p {{ color:#71717a; }}
+</style></head>
+<body>
+  <div class="box">
+    <h3>{status_text}</h3>
+    {f'<p>{safe_error}</p>' if error else ''}
+  </div>
+  <script>
+    (function () {{
+      var message = {json.dumps(message)};
+      if (window.opener) {{
+        try {{ window.opener.postMessage(message, window.location.origin); }} catch (e) {{}}
+      }}
+      setTimeout(function () {{ window.close(); }}, {800 if connected else 2500});
+    }})();
+  </script>
+</body></html>"""
+
+
 @router.get("/auth/tiktok/login")
 async def login_with_tiktok() -> RedirectResponse:
     state = secrets.token_urlsafe(32)
@@ -155,15 +194,15 @@ async def login_with_tiktok() -> RedirectResponse:
     return response
 
 
-@router.get("/auth/tiktok/callback/")
+@router.get("/auth/tiktok/callback/", response_model=None)
 async def tiktok_callback(
     request: Request,
     em_tiktok_oauth: str | None = Cookie(default=None),
-) -> RedirectResponse:
+) -> HTMLResponse | RedirectResponse:
     error = request.query_params.get("error")
     if error:
         detail = request.query_params.get("error_description", error)
-        return RedirectResponse(f"/?tiktok_error={detail}", status_code=302)
+        return HTMLResponse(_popup_close_html(connected=False, error=detail))
 
     code = request.query_params.get("code")
     returned_state = request.query_params.get("state")
@@ -210,7 +249,13 @@ async def tiktok_callback(
         profile=profile_payload.get("data", {}).get("user", {}),
     )
     _save_sessions()
-    response = RedirectResponse("/?tiktok_connected=1", status_code=302)
+    # This callback is opened in a popup window (see /auth/tiktok/login), not the main workspace
+    # tab. Redirecting the popup to "/" would load a brand-new Streamlit session there and leave
+    # the real workspace tab none the wiser. Instead: set the session cookie (shared across tabs,
+    # since it's not tab-scoped), tell the opener via postMessage that TikTok is connected, and
+    # let the popup close itself. The opener polls /api/tiktok/session on that signal.
+    html = _popup_close_html(connected=True)
+    response = HTMLResponse(html)
     response.delete_cookie(OAUTH_COOKIE, path="/")
     response.set_cookie(
         SESSION_COOKIE,

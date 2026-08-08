@@ -6,9 +6,10 @@ from pathlib import Path
 from textwrap import dedent
 
 import streamlit as st
+import streamlit.components.v1 as st_components
 import httpx
 
-APP_VERSION = "v0.12.0"
+APP_VERSION = "v0.13.0"
 APP_NAME = "EM Posting"
 TAGLINE = "One calm place to take a finished video from final cut to an approved TikTok draft."
 APP_ICON_PATH = Path(__file__).parent / "assets" / "em-posting-icon.png"
@@ -341,6 +342,92 @@ def tiktok_session():
     return payload if payload and payload.get("connected") else None, error
 
 
+def render_tiktok_connect_button(*, key, primary=False):
+    """Open TikTok OAuth in a popup window instead of navigating the workspace tab.
+
+    A full-page navigation (even to a new tab, and even a bare URL/query-param change on the
+    current tab) reloads the page and wipes st.session_state -- that's the exact bug this fixes,
+    so avoid all forms of it. Instead: open /auth/tiktok/login in a small popup, listen for its
+    postMessage on success, and click a hidden always-present Streamlit button
+    (`tiktok_oauth_sync_ping`, see render_tiktok_oauth_sync_ping) to trigger a real Streamlit
+    rerun. Streamlit tags keyed elements with a stable `st-key-<key>` CSS class, which is how the
+    popup's iframe (same-origin, so window.parent.document is reachable) finds that button.
+    """
+    login_url = f"{public_base_url()}/auth/tiktok/login"
+    component_id = f"tiktok-connect-{key}"
+    st_components.html(
+        f"""
+        <div id="{component_id}">
+          <button id="{component_id}-btn" type="button" style="
+            width:100%; min-height:2.6rem; border-radius:11px; font-weight:700; cursor:pointer;
+            border:{'none' if primary else '1px solid #d4d4d8'};
+            background:{'linear-gradient(135deg,#4b43dd,#6f63ff)' if primary else '#ffffff'};
+            color:{'#ffffff' if primary else '#1a1a1f'};
+            font-family: system-ui, sans-serif; font-size:.95rem;">
+            Connect with TikTok
+          </button>
+        </div>
+        <script>
+          (function () {{
+            var btn = document.getElementById("{component_id}-btn");
+            function syncParent() {{
+              try {{
+                var pingBtn = window.parent.document.querySelector(
+                  ".st-key-tiktok_oauth_sync_ping button"
+                );
+                if (pingBtn) pingBtn.click();
+              }} catch (e) {{ /* cross-origin or not mounted yet; safe to ignore */ }}
+            }}
+            btn.addEventListener("click", function () {{
+              var w = 480, h = 720;
+              var left = window.screenX + (window.outerWidth - w) / 2;
+              var top = window.screenY + (window.outerHeight - h) / 2;
+              var popup = window.open(
+                "{login_url}", "em_posting_tiktok_oauth",
+                "width=" + w + ",height=" + h + ",left=" + left + ",top=" + top
+              );
+              btn.disabled = true;
+              btn.textContent = "Waiting for TikTok…";
+              function reset() {{
+                btn.disabled = false;
+                btn.textContent = "Connect with TikTok";
+              }}
+              window.addEventListener("message", function handler(event) {{
+                if (!event.data || event.data.source !== "em-posting-tiktok-oauth") return;
+                window.removeEventListener("message", handler);
+                reset();
+                syncParent();
+              }});
+              var poll = setInterval(function () {{
+                if (popup && popup.closed) {{
+                  clearInterval(poll);
+                  reset();
+                  syncParent();
+                }}
+              }}, 500);
+            }});
+          }})();
+        </script>
+        """,
+        height=52,
+    )
+
+
+def render_tiktok_oauth_sync_ping():
+    """Hidden button the popup-connect component clicks to force a rerun after OAuth completes.
+
+    Must be rendered once per page load wherever render_tiktok_connect_button might be used, so
+    the popup's postMessage handler always has a live button to find. Clicking it triggers a
+    normal Streamlit rerun with no URL/navigation change, so session_state survives untouched.
+    """
+    st.markdown(
+        '<style>.st-key-tiktok_oauth_sync_ping { position:absolute; width:1px; height:1px; '
+        "overflow:hidden; opacity:0; pointer-events:none; }</style>",
+        unsafe_allow_html=True,
+    )
+    st.button("Sync TikTok connection", key="tiktok_oauth_sync_ping")
+
+
 def should_show_empty_queue(queue, receipt):
     return not queue and not receipt
 
@@ -608,8 +695,10 @@ def render_home():
                 backend_json("POST", "/api/tiktok/disconnect")
                 st.rerun()
         else:
-            st.link_button("Connect with TikTok", f"{public_base_url()}/auth/tiktok/login", use_container_width=True)
+            render_tiktok_connect_button(key="home")
             st.caption("TikTok Sandbox · Login Kit")
+
+    render_tiktok_oauth_sync_ping()
 
     # Footer
     st.write("")
@@ -973,8 +1062,10 @@ def render_handoff():
                 st.rerun()
     else:
         st.info("Connect TikTok before uploading. TikTok will ask for user.info.basic and video.upload consent.")
-        st.link_button("Connect with TikTok", f"{public_base_url()}/auth/tiktok/login", type="primary", use_container_width=True)
+        render_tiktok_connect_button(key="handoff", primary=True)
         st.caption("The full workspace workflow is usable without a connection. TikTok authorization is required only for the final handoff step.")
+
+    render_tiktok_oauth_sync_ping()
 
     a, b, c = st.columns(3)
     for col, label, value in [

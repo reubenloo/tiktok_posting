@@ -234,6 +234,51 @@ def test_login_uses_configured_public_domain_for_redirect_uri():
     assert "tiktok-posting.onrender.com" not in response.headers["location"]
 
 
+def test_callback_success_returns_popup_html_not_a_redirect():
+    """The callback runs inside a popup window opened by render_tiktok_connect_button, never the
+    main workspace tab. It must never issue a redirect (that would navigate whatever window it's
+    in); it must instead render a self-closing page that postMessages the result to window.opener
+    and sets the session cookie so the main tab picks it up via /api/tiktok/session."""
+    fake_client = FakeAsyncClient(
+        post_responses=[FakeResponse({"access_token": "tok-1", "open_id": "open-1", "scope": "user.info.basic,video.upload"})],
+        get_responses=[FakeResponse({"data": {"user": {"display_name": "Reuben"}}, "error": {"code": "ok"}})],
+    )
+    with patch.object(ti.httpx, "AsyncClient", return_value=fake_client):
+        client = TestClient(app)
+        login_response = client.get("/auth/tiktok/login", follow_redirects=False)
+        oauth_cookie = login_response.cookies[ti.OAUTH_COOKIE]
+        state = ti._serializer().loads(oauth_cookie, max_age=600)
+        response = client.get(
+            "/auth/tiktok/callback/",
+            params={"code": "auth-code", "state": state},
+            cookies={ti.OAUTH_COOKIE: oauth_cookie},
+            follow_redirects=False,
+        )
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/html")
+    assert "em-posting-tiktok-oauth" in response.text
+    assert "\"connected\": true" in response.text
+    assert "window.opener" in response.text
+    assert "window.close" in response.text
+    assert ti.SESSION_COOKIE in response.cookies
+
+
+def test_callback_error_from_tiktok_closes_popup_without_redirect():
+    """If TikTok redirects back with ?error=..., the popup must still close itself gracefully
+    instead of leaving a blank/broken page or navigating the popup to '/'."""
+    client = TestClient(app)
+    response = client.get(
+        "/auth/tiktok/callback/",
+        params={"error": "access_denied", "error_description": "User declined"},
+        follow_redirects=False,
+    )
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/html")
+    assert "User declined" in response.text
+    assert "\"connected\": false" in response.text
+    assert ti.SESSION_COOKIE not in response.cookies
+
+
 def test_session_status_exposes_profile_not_tokens():
     ti._sessions["session-1"] = ti.TikTokSession(
         access_token="do-not-expose",
@@ -316,7 +361,7 @@ def test_status_error_is_not_reported_as_success():
 def test_app_version_is_current():
     """Verify APP_VERSION reflects the current release."""
     namespace = load_app_nodes("APP_VERSION")
-    assert namespace["APP_VERSION"] == "v0.12.0"
+    assert namespace["APP_VERSION"] == "v0.13.0"
 
 
 def test_sample_projects_function_returns_project_library():
@@ -483,7 +528,14 @@ def test_public_workflow_does_not_require_login():
         if isinstance(node, ast.FunctionDef) and node.name == "render_home"
     )
     home_source = ast.get_source_segment(source, home)
-    assert "login" not in home_source.lower() or "Connect with TikTok" in home_source
+    # The literal button label now lives in the shared render_tiktok_connect_button helper
+    # (used by both Home and Handoff for the popup-window OAuth flow); render_home calling it
+    # is the same "clearly framed as TikTok connect, not a real login wall" signal.
+    assert (
+        "login" not in home_source.lower()
+        or "Connect with TikTok" in home_source
+        or "render_tiktok_connect_button" in home_source
+    )
 
 
 def test_sample_asset_function_returns_bundled_video():
