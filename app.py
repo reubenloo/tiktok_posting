@@ -8,7 +8,7 @@ from textwrap import dedent
 import streamlit as st
 import httpx
 
-APP_VERSION = "v0.11.2"
+APP_VERSION = "v0.12.0"
 APP_NAME = "EM Posting"
 TAGLINE = "One calm place to take a finished video from final cut to an approved TikTok draft."
 APP_ICON_PATH = Path(__file__).parent / "assets" / "em-posting-icon.png"
@@ -677,6 +677,34 @@ def render_review():
     # Project review interface
     st.markdown(f"### {project['title']}")
 
+    if project.get("status") == "approved":
+        def back_to_library_from_approved():
+            st.session_state.current_project = None
+            goto("Home")
+
+        left, right = st.columns([1.2, 1])
+        with left:
+            st.markdown("#### Video preview")
+            if project.get("is_sample") and sample_path().exists():
+                st.video(str(sample_path()), muted=True)
+            elif project.get("video_data"):
+                st.video(project["video_data"], muted=True)
+            else:
+                st.info("Video preview is unavailable for this project.")
+        with right:
+            st.markdown(
+                '<div class="card"><span class="pill pill-ok">● Creator approved</span>'
+                "<h3>Approved for handoff</h3>"
+                "<p>The review checklist is complete. Send this project to TikTok drafts from Handoff.</p></div>",
+                unsafe_allow_html=True,
+            )
+            st.write("")
+            st.button("Go to Handoff →", type="primary", use_container_width=True, on_click=goto, args=("Handoff",))
+
+        st.write("")
+        st.button("← Back to library", use_container_width=True, on_click=back_to_library_from_approved)
+        return
+
     left, right = st.columns([1.2, 1])
 
     with left:
@@ -772,7 +800,6 @@ def render_review():
                         st.session_state.queue.insert(0, item)
 
                     st.success("Project approved and added to the handoff queue.")
-                    st.session_state.current_project = None
                     st.rerun()
             else:
                 update_project(project["id"], updates)
@@ -780,16 +807,12 @@ def render_review():
                 st.rerun()
 
     st.write("")
-    nav_cols = st.columns([1, 1, 1])
-    with nav_cols[0]:
-        def back_to_library():
-            st.session_state.current_project = None
-            goto("Home")
 
-        st.button("← Back to library", use_container_width=True, on_click=back_to_library)
-    with nav_cols[2]:
-        if project.get("status") == "approved":
-            st.button("Go to Handoff →", type="primary", use_container_width=True, on_click=goto, args=("Handoff",))
+    def back_to_library():
+        st.session_state.current_project = None
+        goto("Home")
+
+    st.button("← Back to library", use_container_width=False, on_click=back_to_library)
 
 
 # ------------------------------------------------------------------------- Studio
@@ -806,6 +829,7 @@ def render_studio():
         st.markdown("### Select video")
         source = st.segmented_control("Source", ["Sample library", "Upload MP4"], default="Sample library")
         uploaded = None
+        project_title = ""
         if source == "Upload MP4":
             uploaded = st.file_uploader(
                 "Choose a finished vertical video",
@@ -814,6 +838,13 @@ def render_studio():
             )
             if uploaded is not None:
                 st.video(uploaded)
+
+            project_title = st.text_input(
+                "Project title",
+                placeholder="e.g. A founder's night routine",
+                help="Shown in the library and handoff queue. Leave blank to name it after the file.",
+                key="studio_project_title",
+            )
 
         def add_sample_project():
             st.session_state.asset = sample_asset()
@@ -833,7 +864,8 @@ def render_studio():
             else:
                 data = uploaded.getvalue()
                 fingerprint = hashlib.sha256(data).hexdigest()[:16]
-                title = Path(uploaded.name).stem.replace("-", " ").replace("_", " ").title()
+                fallback_title = Path(uploaded.name).stem.replace("-", " ").replace("_", " ").title()
+                title = project_title.strip() or fallback_title
                 new_project = {
                     "id": f"proj-{fingerprint[:6]}",
                     "title": title,

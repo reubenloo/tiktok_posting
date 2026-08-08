@@ -7,4 +7,4 @@ httpx>=0.27,<1.0
 uvicorn>=0.30,<1.0
 itsdangerous>=2.2,<3.0
 python-multipart>=0.0.20,<1.0
-# em-posting v0.11.2 - fix proxy stripping content-encoding while forwarding raw compressed bytes (rebuild marker)
+# em-posting v0.12.0 - fix review-page project title guessing, approve dead-end, and handoff CTA placement (rebuild marker)
