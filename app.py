@@ -9,16 +9,18 @@ import streamlit as st
 import streamlit.components.v1 as st_components
 import httpx
 
-APP_VERSION = "v0.13.2"
-APP_NAME = "EM Posting"
-TAGLINE = "One calm place to take a finished video from final cut to an approved TikTok draft."
+APP_VERSION = "v0.14.0"
+# Product identity and legal copy live in branding.py so app.py, server.py, and the crawlable
+# legal pages can never drift apart -- TikTok app review requires the app name, website title,
+# and domain to match exactly.
+from branding import APP_NAME, TAGLINE  # noqa: E402
 APP_ICON_PATH = Path(__file__).parent / "assets" / "em-posting-icon.png"
 
 # Externally-facing origin for browser links (Home, legal, sign-in). Production must set
 # EM_POSTING_PUBLIC_URL to an owned custom domain that does not contain "tiktok"; this Render URL
 # is only a documented Sandbox/local verification fallback. Do not hard-code it anywhere else.
 PUBLIC_URL_FALLBACK = "https://posting-app-gvtf.onrender.com"
-CONTACT_EMAIL = "contact@eczemamitten.com"
+from branding import CONTACT_EMAIL  # noqa: E402
 
 # Creator post limit. TikTok developer-form limits belong in README, not the product UI.
 CAPTION_MAX = 2200
@@ -42,83 +44,8 @@ APP_REVIEW_EXPLANATION = (
     "data, or automate engagement."
 )
 
-TERMS = dedent(
-    """
-    # Terms of Service
+from branding import PRIVACY, TERMS, PRIVACY_PATH, TERMS_PATH  # noqa: E402
 
-    **Last updated: July 2026**
-
-    EM Posting is a creator workflow product for preparing, reviewing, and handing approved
-    short-form videos to supported social platforms.
-
-    ## Account and workspace use
-    You may use EM Posting only for workspaces and creator accounts you are authorized to manage.
-    You are responsible for the videos, descriptions, approvals, and account selections made in your
-    workspace.
-
-    ## Creator approval
-    EM Posting is designed around deliberate human review. A creator or authorized team member must
-    review each post before initiating a platform handoff. The service may not be used for spam,
-    deceptive automation, unauthorized account access, or attempts to bypass platform controls.
-
-    ## Platform services
-    Platform integrations remain subject to each platform's terms, permissions, technical limits, and
-    review requirements. A successful handoff does not guarantee publication. Final editing and
-    posting may continue inside the destination platform.
-
-    ## Content rights
-    You must have the rights and permissions required to upload and publish the content you submit.
-
-    ## Availability
-    Features may change as integrations mature. TikTok Sandbox connections and draft uploads are
-    available only to authorized pilot users. A successful draft upload does not guarantee that the
-    creator will complete or publish the post inside TikTok.
-
-    ## Contact
-    Product and policy questions may be sent to contact@eczemamitten.com while EM Posting is in its
-    initial creator pilot.
-    """
-).strip()
-
-PRIVACY = dedent(
-    """
-    # Privacy Policy
-
-    **Last updated: July 2026**
-
-    EM Posting is a creator workflow product. This policy describes the information the service may
-    process to prepare and hand creator-approved posts to supported platforms.
-
-    ## Information processed
-    EM Posting may process creator account labels, finished video files, descriptions, review notes,
-    approval choices, file metadata, and workflow activity such as review and handoff timestamps.
-
-    ## How information is used
-    This information is used to display the creator workspace, preserve review decisions, prepare
-    platform handoffs, and show workflow receipts to authorized users.
-
-    ## Platform data
-    The TikTok integration uses Login Kit to access the connected creator's basic identity and uses
-    video.upload only after explicit approval to transfer one MP4 to the draft/inbox flow. EM Posting
-    does not request direct messages, comments, follower lists, analytics, or unrelated account data.
-
-    ## Storage
-    This pilot uses session-only application state and does not permanently store uploaded videos.
-    TikTok access and refresh tokens are kept server-side for the active pilot session and are never
-    exposed in the browser or public source repository. Sessions can be disconnected at any time.
-
-    ## Sharing
-    Content would be sent to a platform only after an authorized creator initiates the handoff. EM
-    Posting does not sell personal information.
-
-    ## Security
-    Any future production credentials must be stored in private deployment secrets and are never
-    included in the public source repository.
-
-    ## Contact
-    Privacy questions may be sent to contact@eczemamitten.com during the initial pilot.
-    """
-).strip()
 
 st.set_page_config(
     page_title=APP_NAME,
@@ -307,8 +234,14 @@ def public_base_url():
 
 
 def legal_url(policy):
-    """Public URL for a directly linkable legal page (policy is 'terms' or 'privacy')."""
-    return f"{public_base_url()}/?page=legal&policy={policy}"
+    """Public URL for a directly linkable legal page (policy is 'terms' or 'privacy').
+
+    These resolve to real server-rendered HTML documents at /terms-of-service and
+    /privacy-policy (see server.py), which is the exact URL shape TikTok app review expects --
+    not a query parameter into the single-page app.
+    """
+    path = "/terms-of-service" if policy == "terms" else "/privacy-policy"
+    return f"{public_base_url()}{path}"
 
 
 def backend_origin():

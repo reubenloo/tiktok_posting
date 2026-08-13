@@ -102,8 +102,13 @@ def test_public_links_use_configured_origin_not_request_host():
     )
     with patch.dict(os.environ, {"EM_POSTING_PUBLIC_URL": "https://posting.example.com"}):
         assert namespace["public_base_url"]() == "https://posting.example.com"
+        # Legal links are now real paths, not query parameters into the SPA -- TikTok app review
+        # asks for <domain>/terms-of-service and <domain>/privacy-policy specifically.
         assert namespace["legal_url"]("terms") == (
-            "https://posting.example.com/?page=legal&policy=terms"
+            "https://posting.example.com/terms-of-service"
+        )
+        assert namespace["legal_url"]("privacy") == (
+            "https://posting.example.com/privacy-policy"
         )
 
 
@@ -135,9 +140,23 @@ def test_production_render_domain_is_the_only_fallback():
 
 
 def test_public_contact_email_is_used_in_app_and_legal_copy():
-    app_source = Path("app.py").read_text()
-    assert "contact@eczemamitten.com" in app_source
-    assert "eczemamitten@gmail.com" not in app_source
+    """The contact address must be the business one, wherever it now lives.
+
+    The literal moved into branding.py when app.py, server.py, and the crawlable legal pages were
+    unified onto one identity source, so assert against the whole served surface.
+    """
+    import branding
+
+    combined = (
+        Path("app.py").read_text()
+        + Path("branding.py").read_text()
+        + branding.legal_page_html("privacy")
+        + branding.legal_page_html("terms")
+    )
+    assert "contact@eczemamitten.com" in combined
+    assert "eczemamitten@gmail.com" not in combined
+    # The address must actually reach the rendered legal pages, not just sit in source.
+    assert "contact@eczemamitten.com" in branding.legal_page_html("privacy")
 
 
 def test_one_branded_icon_is_used_for_page_config_and_sidebar():
@@ -377,6 +396,71 @@ def test_disconnect_does_not_write_to_an_instantiated_widget_key():
     )
 
 
+def test_served_html_carries_the_app_name_not_streamlits_default():
+    """Regression: TikTok rejected the app because the website title did not match the app name.
+
+    Streamlit's static index.html ships `<title>Streamlit</title>` and only applies the real title
+    client-side, so a reviewer or crawler reading the raw HTML saw "Streamlit". The proxy must
+    rewrite the document head before serving it.
+    """
+    import branding
+
+    streamlit_shell = (
+        "<!DOCTYPE html><html><head><title>Streamlit</title>"
+        '<meta name="description" content="Streamlit" />'
+        "</head><body></body></html>"
+    )
+    rewritten = branding.rewrite_document_head(streamlit_shell)
+    assert f"<title>{branding.APP_NAME}</title>" in rewritten
+    assert "<title>Streamlit</title>" not in rewritten
+    assert branding.SHORT_DESCRIPTION in rewritten
+    assert 'property="og:title"' in rewritten
+
+
+def test_legal_pages_are_real_documents_at_the_paths_tiktok_asks_for():
+    """TikTok asks for <domain>/privacy-policy and <domain>/terms-of-service specifically.
+
+    Previously both were query parameters into the single-page app (?page=legal&policy=...), so
+    every URL returned the identical JS shell with no policy text for a crawler to read.
+    """
+    import branding
+
+    assert branding.PRIVACY_PATH == "/privacy-policy"
+    assert branding.TERMS_PATH == "/terms-of-service"
+
+    privacy = branding.legal_page_html("privacy")
+    terms = branding.legal_page_html("terms")
+
+    assert f"<title>{branding.APP_NAME} - Privacy Policy</title>" in privacy
+    assert f"<title>{branding.APP_NAME} - Terms of Service</title>" in terms
+    # Real policy prose must be present in the served HTML, not injected later by JavaScript.
+    assert "video.upload" in privacy
+    assert "does not sell personal information" in privacy
+    assert "Creator approval" in terms
+    assert privacy != terms
+
+    # app.py must link to the real paths, not the old query-parameter form.
+    app_source = Path("app.py").read_text()
+    assert "?page=legal&policy=" not in app_source
+    # legal_url() inlines these literals (it is loaded in isolation by load_app_nodes), so guard
+    # against them drifting away from branding.py.
+    assert branding.TERMS_PATH in app_source
+    assert branding.PRIVACY_PATH in app_source
+
+
+def test_app_and_server_share_one_identity_source():
+    """app.py, server.py, and the legal pages must not drift on the app name."""
+    import branding
+
+    app_source = Path("app.py").read_text()
+    server_source = Path("server.py").read_text()
+    assert "from branding import" in app_source
+    assert "from branding import" in server_source
+    # The name must not be hardcoded a second time in app.py.
+    assert 'APP_NAME = "' not in app_source
+    assert branding.APP_NAME
+
+
 def test_session_status_exposes_profile_not_tokens():
     ti._sessions["session-1"] = ti.TikTokSession(
         access_token="do-not-expose",
@@ -459,7 +543,7 @@ def test_status_error_is_not_reported_as_success():
 def test_app_version_is_current():
     """Verify APP_VERSION reflects the current release."""
     namespace = load_app_nodes("APP_VERSION")
-    assert namespace["APP_VERSION"] == "v0.13.2"
+    assert namespace["APP_VERSION"] == "v0.14.0"
 
 
 def test_sample_projects_function_returns_project_library():

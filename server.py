@@ -14,8 +14,15 @@ import httpx
 import uvicorn
 import websockets
 from fastapi import FastAPI, Request, Response, WebSocket, WebSocketDisconnect
-from fastapi.responses import PlainTextResponse, StreamingResponse
+from fastapi.responses import HTMLResponse, PlainTextResponse, StreamingResponse
 
+from branding import (
+    APP_NAME,
+    PRIVACY_PATH,
+    TERMS_PATH,
+    legal_page_html,
+    rewrite_document_head,
+)
 from tiktok_integration import router as tiktok_router
 
 ROOT = Path(__file__).resolve().parent
@@ -86,6 +93,18 @@ async def app_icon():
     return Response(APP_ICON_PATH.read_bytes(), media_type="image/png")
 
 
+@app.get(TERMS_PATH, response_class=HTMLResponse)
+async def terms_of_service():
+    """Real, crawlable Terms page at the exact path TikTok app review asks for."""
+    return HTMLResponse(legal_page_html("terms"))
+
+
+@app.get(PRIVACY_PATH, response_class=HTMLResponse)
+async def privacy_policy():
+    """Real, crawlable Privacy page at the exact path TikTok app review asks for."""
+    return HTMLResponse(legal_page_html("privacy"))
+
+
 @app.api_route("/{path:path}", methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD"])
 async def proxy_http(request: Request, path: str):
     target = f"{STREAMLIT_HTTP}/{path}"
@@ -103,6 +122,26 @@ async def proxy_http(request: Request, path: str):
     response_headers = dict(upstream.headers)
     for header in ("content-length", "transfer-encoding", "connection", "content-encoding"):
         response_headers.pop(header, None)
+
+    # Streamlit serves a static index.html whose <title> is the literal string "Streamlit"; the
+    # real title is only set client-side after the app boots. TikTok's reviewer (and any crawler)
+    # reads the raw HTML, so the served document must already carry the correct app name. HTML is
+    # small, so buffer it and rewrite the head rather than streaming it through untouched.
+    content_type = upstream.headers.get("content-type", "")
+    if content_type.startswith("text/html"):
+        try:
+            raw = await upstream.aread()
+        finally:
+            await upstream.aclose()
+            await client.aclose()
+        rewritten = rewrite_document_head(raw.decode("utf-8", errors="replace"))
+        response_headers.pop("content-length", None)
+        return Response(
+            content=rewritten,
+            status_code=upstream.status_code,
+            headers=response_headers,
+            media_type=content_type,
+        )
 
     async def body_stream():
         try:
