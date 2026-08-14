@@ -9,7 +9,7 @@ import streamlit as st
 import streamlit.components.v1 as st_components
 import httpx
 
-APP_VERSION = "v0.14.0"
+APP_VERSION = "v0.14.1"
 # Product identity and legal copy live in branding.py so app.py, server.py, and the crawlable
 # legal pages can never drift apart -- TikTok app review requires the app name, website title,
 # and domain to match exactly.
@@ -33,14 +33,14 @@ SHORT_DESCRIPTION = (
 
 # Kept in sync with the submission copy in README.md (App review explanation, under 1000 chars).
 APP_REVIEW_EXPLANATION = (
-    "EM Posting uses Login Kit and TikTok's Content Posting API to upload one creator-approved MP4 "
+    f"{APP_NAME} uses Login Kit and TikTok's Content Posting API to upload one creator-approved MP4 "
     "to the authorized creator's TikTok draft/inbox flow. The creator signs in with TikTok and "
-    "grants user.info.basic and video.upload. In EM Posting, the creator selects or uploads a "
+    f"grants user.info.basic and video.upload. In {APP_NAME}, the creator selects or uploads a "
     "finished MP4, previews it, confirms content rights and policy compliance, and explicitly "
-    "approves the transfer. EM Posting initializes the upload through "
+    f"approves the transfer. {APP_NAME} initializes the upload through "
     "/v2/post/publish/inbox/video/init/ using FILE_UPLOAD and transfers the MP4 to TikTok's "
     "provided upload URL. The creator then opens the notification in TikTok to complete the "
-    "caption, final editing, and posting. EM Posting does not directly publish, bulk post, scrape "
+    f"caption, final editing, and posting. {APP_NAME} does not directly publish, bulk post, scrape "
     "data, or automate engagement."
 )
 
@@ -286,7 +286,7 @@ def backend_json(method, path, **kwargs):
         )
         payload = response.json()
     except (httpx.HTTPError, json.JSONDecodeError) as exc:
-        return None, f"EM Posting could not reach its TikTok service: {exc}"
+        return None, f"{APP_NAME} could not reach its TikTok service: {exc}"
     if response.is_error:
         return None, payload.get("detail", f"TikTok service returned HTTP {response.status_code}")
     return payload, None
@@ -714,7 +714,7 @@ def render_home():
         f"""
         <hr style="border:none;border-top:1px solid var(--line);margin:2rem 0 1rem;">
         <div class="note">
-          © 2026 EM Posting · Creator publishing workspace ·
+          © 2026 {APP_NAME} · Creator publishing workspace ·
           <a href="{legal_url('terms')}">Terms of Service</a> ·
           <a href="{legal_url('privacy')}">Privacy Policy</a> ·
           <a href="mailto:{CONTACT_EMAIL}">{CONTACT_EMAIL}</a>
@@ -1211,7 +1211,7 @@ def render_handoff():
 
 
 def render_legal():
-    page_header("Legal", "Terms & Privacy", "The policies for the EM Posting creator workflow product.")
+    page_header("Legal", "Terms & Privacy", f"The policies for the {APP_NAME} creator workflow product.")
     version_caption()
     policy = st.query_params.get("policy")
     if policy == "terms":
@@ -1242,8 +1242,8 @@ if "pending_nav" in st.session_state:
 
 with st.sidebar:
     st.markdown(
-        '<div class="brand"><span class="brand-mark"><img src="/app/static/assets/em-posting-icon.png" '
-        'alt="EM Posting icon"></span>EM Posting</div>',
+        f'<div class="brand"><span class="brand-mark"><img src="/app/static/assets/em-posting-icon.png" '
+        f'alt="{APP_NAME} icon"></span>{APP_NAME}</div>',
         unsafe_allow_html=True,
     )
     st.markdown(

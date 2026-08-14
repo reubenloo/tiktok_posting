@@ -89,6 +89,16 @@ def _env(name: str) -> str:
     return value
 
 
+def _brand_name() -> str:
+    """Product name, read at call time so EM_POSTING_APP_NAME applies without a code change.
+
+    Imported lazily to keep tiktok_integration importable on its own in tests.
+    """
+    from branding import APP_NAME
+
+    return APP_NAME
+
+
 def public_base_url() -> str:
     """Externally-facing origin. Prefers EM_POSTING_PUBLIC_URL (the owned production domain);
     falls back to the documented Render URL for Sandbox/local verification."""
@@ -153,7 +163,7 @@ def _popup_close_html(*, connected: bool, error: str | None = None, handoff: str
     if handoff:
         message["handoff"] = handoff
     return f"""<!doctype html>
-<html><head><meta charset="utf-8"><title>EM Posting · TikTok</title>
+<html><head><meta charset="utf-8"><title>{_brand_name()} · TikTok</title>
 <style>
   body {{ font-family: system-ui, sans-serif; background:#f6f5f1; color:#1a1a1f;
           display:flex; align-items:center; justify-content:center; height:100vh; margin:0; }}

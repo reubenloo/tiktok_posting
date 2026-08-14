@@ -461,6 +461,56 @@ def test_app_and_server_share_one_identity_source():
     assert branding.APP_NAME
 
 
+def test_no_hardcoded_product_name_anywhere_in_shipped_code():
+    """Regression: the sidebar, footer, legal header and OAuth popup hardcoded "EM Posting".
+
+    After the app was renamed via EM_POSTING_APP_NAME the tab title said "Noclen" while the
+    sidebar still said "EM Posting" -- exactly the app-name/website-title mismatch TikTok
+    rejects. branding.py's fallback default is the only permitted occurrence.
+    """
+    import branding
+
+    for filename in ("app.py", "server.py", "tiktok_integration.py"):
+        source = Path(filename).read_text()
+        assert "EM Posting" not in source, (
+            f"{filename} hardcodes the product name; read it from branding.APP_NAME instead"
+        )
+
+    branding_source = Path("branding.py").read_text()
+    # Only the environment-variable fallback may name the product.
+    assert branding_source.count("EM Posting") == 2, (
+        "branding.py should only mention the product name in the APP_NAME fallback default"
+    )
+
+
+def test_renaming_via_env_var_reaches_every_surface():
+    """A rename must flow to the tab title, legal pages, popup and review copy together."""
+    import importlib
+    import branding
+
+    with patch.dict(os.environ, {"EM_POSTING_APP_NAME": "Noclen"}):
+        reloaded = importlib.reload(branding)
+        try:
+            assert reloaded.APP_NAME == "Noclen"
+            assert "<title>Noclen</title>" in reloaded.rewrite_document_head(
+                "<html><head><title>Streamlit</title></head></html>"
+            )
+            privacy = reloaded.legal_page_html("privacy")
+            terms = reloaded.legal_page_html("terms")
+            assert "<title>Noclen - Privacy Policy</title>" in privacy
+            assert "<title>Noclen - Terms of Service</title>" in terms
+            assert "EM Posting" not in privacy
+            assert "EM Posting" not in terms
+
+            import tiktok_integration
+
+            popup = tiktok_integration._popup_close_html(connected=True, handoff="tok")
+            assert "<title>Noclen · TikTok</title>" in popup
+            assert "EM Posting" not in popup
+        finally:
+            importlib.reload(branding)
+
+
 def test_session_status_exposes_profile_not_tokens():
     ti._sessions["session-1"] = ti.TikTokSession(
         access_token="do-not-expose",
@@ -543,7 +593,7 @@ def test_status_error_is_not_reported_as_success():
 def test_app_version_is_current():
     """Verify APP_VERSION reflects the current release."""
     namespace = load_app_nodes("APP_VERSION")
-    assert namespace["APP_VERSION"] == "v0.14.0"
+    assert namespace["APP_VERSION"] == "v0.14.1"
 
 
 def test_sample_projects_function_returns_project_library():
