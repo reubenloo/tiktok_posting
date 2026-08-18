@@ -20,6 +20,8 @@ from branding import (
     APP_NAME,
     PRIVACY_PATH,
     TERMS_PATH,
+    WORKSPACE_PATH,
+    landing_page_html,
     legal_page_html,
     rewrite_document_head,
 )
@@ -93,6 +95,18 @@ async def app_icon():
     return Response(APP_ICON_PATH.read_bytes(), media_type="image/png")
 
 
+@app.get("/", response_class=HTMLResponse)
+async def landing():
+    """Server-rendered homepage.
+
+    Streamlit renders client-side only, so serving the workspace at "/" meant a reviewer or
+    crawler fetching the site received a JavaScript stub reading "You need to enable JavaScript
+    to run this app." -- which is why review reported "Website must be fully developed". The
+    workspace itself now lives at WORKSPACE_PATH and is proxied normally.
+    """
+    return HTMLResponse(landing_page_html())
+
+
 @app.get(TERMS_PATH, response_class=HTMLResponse)
 async def terms_of_service():
     """Real, crawlable Terms page at the exact path TikTok app review asks for."""
@@ -107,6 +121,14 @@ async def privacy_policy():
 
 @app.api_route("/{path:path}", methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD"])
 async def proxy_http(request: Request, path: str):
+    # The landing page owns "/", so the Streamlit workspace is exposed at WORKSPACE_PATH and
+    # mapped back onto Streamlit's own root here. Streamlit's asset routes (/static, /_stcore,
+    # /media) are absolute and continue to proxy through untouched.
+    workspace_prefix = WORKSPACE_PATH.lstrip("/")
+    if path == workspace_prefix:
+        path = ""
+    elif path.startswith(f"{workspace_prefix}/"):
+        path = path[len(workspace_prefix) + 1 :]
     target = f"{STREAMLIT_HTTP}/{path}"
     headers = dict(request.headers)
     headers.pop("host", None)

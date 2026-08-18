@@ -511,6 +511,52 @@ def test_renaming_via_env_var_reaches_every_surface():
             importlib.reload(branding)
 
 
+def test_homepage_is_readable_without_javascript():
+    """Regression: TikTok rejected with "Website error, Website must be fully developed".
+
+    Streamlit renders entirely client-side, so a headless fetch of "/" returned 53 characters of
+    visible text -- "You need to enable JavaScript to run this app." The homepage must now be
+    real server-rendered HTML describing the product.
+    """
+    import re
+
+    import branding
+
+    page = branding.landing_page_html()
+    stripped = re.sub(r"<script.*?</script>", "", page, flags=re.S | re.I)
+    stripped = re.sub(r"<style.*?</style>", "", stripped, flags=re.S | re.I)
+    visible = re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", stripped)).strip()
+
+    assert "enable JavaScript" not in visible
+    assert len(visible) > 1000, (
+        f"homepage exposes only {len(visible)} chars without JS; reviewers see an empty site"
+    )
+    # The product must actually be described, not just named.
+    assert branding.APP_NAME in visible
+    assert "How it works" in visible
+    assert "TikTok" in visible
+    assert "<h1>" in page
+    # Legal pages must remain linked from the homepage.
+    assert branding.TERMS_PATH in page
+    assert branding.PRIVACY_PATH in page
+
+
+def test_workspace_moved_off_the_root_path():
+    """The landing page owns "/", so the Streamlit workspace must be reachable elsewhere."""
+    import branding
+
+    assert branding.WORKSPACE_PATH == "/workspace"
+    # The landing page must offer a way into the actual app.
+    assert branding.WORKSPACE_PATH in branding.landing_page_html()
+
+    server_source = Path("server.py").read_text()
+    # "/" must be served by the landing route, not proxied to Streamlit.
+    assert 'async def landing()' in server_source
+    assert "landing_page_html()" in server_source
+    # The proxy must strip the workspace prefix before forwarding to Streamlit.
+    assert "workspace_prefix" in server_source
+
+
 def test_session_status_exposes_profile_not_tokens():
     ti._sessions["session-1"] = ti.TikTokSession(
         access_token="do-not-expose",
@@ -593,7 +639,7 @@ def test_status_error_is_not_reported_as_success():
 def test_app_version_is_current():
     """Verify APP_VERSION reflects the current release."""
     namespace = load_app_nodes("APP_VERSION")
-    assert namespace["APP_VERSION"] == "v0.14.1"
+    assert namespace["APP_VERSION"] == "v0.15.0"
 
 
 def test_sample_projects_function_returns_project_library():

@@ -148,6 +148,156 @@ def _markdown_to_html(markdown_text: str) -> str:
     return "\n      ".join(parts)
 
 
+_LANDING_TEMPLATE = """<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{app_name}</title>
+    <meta name="description" content="{description}" />
+    <meta property="og:site_name" content="{app_name}" />
+    <meta property="og:title" content="{app_name}" />
+    <meta property="og:description" content="{description}" />
+    <link rel="icon" href="/favicon.png" />
+    <style>
+      * {{ box-sizing: border-box; }}
+      body {{
+        margin: 0; background: #f6f5f1; color: #1a1a1f;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        line-height: 1.6;
+      }}
+      .wrap {{ max-width: 60rem; margin: 0 auto; padding: 2rem 1.25rem 3rem; }}
+      header.top {{ display: flex; align-items: center; gap: .7rem; padding-bottom: 1.5rem; }}
+      header.top img {{ width: 40px; height: 40px; border-radius: 9px; }}
+      header.top .name {{ font-weight: 700; font-size: 1.15rem; }}
+      .hero {{ background: #fff; border: 1px solid #e8e6e0; border-radius: 16px; padding: 2.5rem; }}
+      .hero h1 {{ font-size: 2.1rem; margin: 0 0 .75rem; line-height: 1.25; }}
+      .hero p.lede {{ font-size: 1.1rem; color: #3f3f46; margin: 0 0 1.5rem; max-width: 42rem; }}
+      .cta {{ display: inline-block; background: #1a1a1f; color: #fff; text-decoration: none;
+              padding: .8rem 1.4rem; border-radius: 10px; font-weight: 600; }}
+      .cta.secondary {{ background: #fff; color: #1a1a1f; border: 1px solid #d4d4d8; margin-left: .5rem; }}
+      h2 {{ font-size: 1.35rem; margin: 2.5rem 0 1rem; }}
+      .steps {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr)); gap: 1rem; }}
+      .step {{ background: #fff; border: 1px solid #e8e6e0; border-radius: 12px; padding: 1.25rem; }}
+      .step .num {{ display: inline-flex; align-items: center; justify-content: center;
+                    width: 26px; height: 26px; border-radius: 50%; background: #1a1a1f; color: #fff;
+                    font-size: .85rem; font-weight: 700; margin-bottom: .6rem; }}
+      .step h3 {{ margin: 0 0 .4rem; font-size: 1rem; }}
+      .step p {{ margin: 0; font-size: .93rem; color: #52525b; }}
+      ul.plain {{ padding-left: 1.1rem; }}
+      ul.plain li {{ margin-bottom: .5rem; }}
+      .panel {{ background: #fff; border: 1px solid #e8e6e0; border-radius: 12px; padding: 1.5rem; }}
+      footer {{ margin-top: 3rem; padding-top: 1.25rem; border-top: 1px solid #e4e2dc;
+                font-size: .9rem; color: #71717a; }}
+      footer a {{ color: #4f46e5; }}
+      a {{ color: #4f46e5; }}
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <header class="top">
+        <img src="/favicon.png" alt="{app_name} icon" />
+        <span class="name">{app_name}</span>
+      </header>
+
+      <section class="hero">
+        <h1>{tagline}</h1>
+        <p class="lede">{description}</p>
+        <a class="cta" href="{workspace_path}">Open the workspace</a>
+        <a class="cta secondary" href="#how-it-works">See how it works</a>
+      </section>
+
+      <h2 id="how-it-works">How it works</h2>
+      <div class="steps">
+        <div class="step">
+          <span class="num">1</span>
+          <h3>Bring in a finished video</h3>
+          <p>Upload an already-edited MP4, or pick one from your workspace. {app_name} does not
+             create or edit video; it starts from your final cut.</p>
+        </div>
+        <div class="step">
+          <span class="num">2</span>
+          <h3>Review before anything ships</h3>
+          <p>Preview the video, write the caption, and work through a review checklist covering
+             content rights and platform policy.</p>
+        </div>
+        <div class="step">
+          <span class="num">3</span>
+          <h3>Approve deliberately</h3>
+          <p>A person has to approve each post. Nothing is queued for handoff until someone
+             explicitly signs off on it.</p>
+        </div>
+        <div class="step">
+          <span class="num">4</span>
+          <h3>Hand off to TikTok drafts</h3>
+          <p>Connect an authorized TikTok account and send the approved MP4 to that creator's
+             TikTok drafts, where they finish and post it inside TikTok.</p>
+        </div>
+      </div>
+
+      <h2>Why a review step</h2>
+      <div class="panel">
+        <p>Small teams lose track of which cut was approved, which account it belongs to, and what
+           already shipped. {app_name} keeps that decision in one place: every post has a reviewer,
+           an approval time, and a record of where it was sent.</p>
+        <ul class="plain">
+          <li><strong>Human approval required.</strong> No bulk publishing, no automated engagement,
+              no scraping.</li>
+          <li><strong>The creator stays in control.</strong> Content is only sent after the account
+              owner authorizes the connection and approves the specific post.</li>
+          <li><strong>Drafts, not direct posts.</strong> Video arrives in the creator's TikTok
+              drafts/inbox so they complete the caption and publish from TikTok themselves.</li>
+        </ul>
+      </div>
+
+      <h2>TikTok integration</h2>
+      <div class="panel">
+        <p>{app_name} uses TikTok Login Kit so a creator can connect their own account, and the
+           TikTok Content Posting API to transfer one approved MP4 into that creator's drafts.</p>
+        <ul class="plain">
+          <li><strong>user.info.basic</strong> &mdash; shows which TikTok account is connected, so
+              the video is never sent to the wrong profile.</li>
+          <li><strong>video.upload</strong> &mdash; transfers a single approved MP4 to the creator's
+              TikTok drafts after explicit approval.</li>
+        </ul>
+        <p>Connections can be disconnected at any time from the workspace.</p>
+      </div>
+
+      <footer>
+        &copy; 2026 {app_name} &middot; Creator publishing workspace &middot;
+        <a href="{terms_path}">Terms of Service</a> &middot;
+        <a href="{privacy_path}">Privacy Policy</a> &middot;
+        <a href="mailto:{contact}">{contact}</a>
+      </footer>
+    </div>
+  </body>
+</html>
+"""
+
+# The Streamlit workspace is served from this path; the landing page owns "/" so that reviewers and
+# crawlers receive real HTML instead of Streamlit's JavaScript-only shell.
+WORKSPACE_PATH = "/workspace"
+
+
+def landing_page_html() -> str:
+    """Server-rendered marketing/product homepage.
+
+    TikTok rejected the site with "Website error, Website must be fully developed". The cause was
+    that Streamlit renders entirely client-side, so a headless fetch of "/" returned 53 characters
+    of visible text: "You need to enable JavaScript to run this app." This page describes the real
+    product in plain HTML so the site is legible without executing JavaScript.
+    """
+    return _LANDING_TEMPLATE.format(
+        app_name=html.escape(APP_NAME),
+        tagline=html.escape(TAGLINE),
+        description=html.escape(SHORT_DESCRIPTION),
+        workspace_path=WORKSPACE_PATH,
+        terms_path=TERMS_PATH,
+        privacy_path=PRIVACY_PATH,
+        contact=html.escape(CONTACT_EMAIL),
+    )
+
+
 _PAGE_TEMPLATE = """<!DOCTYPE html>
 <html lang="en">
   <head>
