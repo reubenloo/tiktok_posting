@@ -35,6 +35,11 @@ STREAMLIT_HOST = "127.0.0.1"
 STREAMLIT_PORT = 8502
 STREAMLIT_HTTP = f"http://{STREAMLIT_HOST}:{STREAMLIT_PORT}"
 STREAMLIT_WS = f"ws://{STREAMLIT_HOST}:{STREAMLIT_PORT}"
+# Streamlit is told to serve itself under the workspace prefix, so the URLs it builds for its own
+# static assets and its /_stcore/stream websocket already carry the prefix. Rewriting paths in the
+# proxy instead would fix the HTML but leave the client asking for a websocket path that Streamlit
+# does not listen on -- which loaded the shell and then hung forever.
+STREAMLIT_BASE_PATH = WORKSPACE_PATH.strip("/")
 
 
 @asynccontextmanager
@@ -49,6 +54,8 @@ async def lifespan(_: FastAPI):
         STREAMLIT_HOST,
         "--server.port",
         str(STREAMLIT_PORT),
+        "--server.baseUrlPath",
+        STREAMLIT_BASE_PATH,
         "--server.headless",
         "true",
         cwd=ROOT,
@@ -57,7 +64,7 @@ async def lifespan(_: FastAPI):
         for attempt in range(100):
             try:
                 async with httpx.AsyncClient(timeout=1.0) as client:
-                    response = await client.get(f"{STREAMLIT_HTTP}/_stcore/health")
+                    response = await client.get(f"{STREAMLIT_HTTP}/{STREAMLIT_BASE_PATH}/_stcore/health")
                 if response.status_code == 200:
                     break
             except httpx.HTTPError:
@@ -107,6 +114,17 @@ async def landing():
     return HTMLResponse(landing_page_html())
 
 
+@app.get(WORKSPACE_PATH, include_in_schema=False)
+async def workspace_root(request: Request):
+    """Serve the workspace at both /workspace and /workspace/.
+
+    Streamlit's baseUrlPath issues a 307 to /workspace/ whose Location header carries Streamlit's
+    own internal host:port. Proxying that redirect would send the browser to 127.0.0.1:8502, so
+    the trailing-slash form is fetched here instead and returned directly.
+    """
+    return await proxy_http(request, f"{STREAMLIT_BASE_PATH}/")
+
+
 @app.get(TERMS_PATH, response_class=HTMLResponse)
 async def terms_of_service():
     """Real, crawlable Terms page at the exact path TikTok app review asks for."""
@@ -121,14 +139,12 @@ async def privacy_policy():
 
 @app.api_route("/{path:path}", methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD"])
 async def proxy_http(request: Request, path: str):
-    # The landing page owns "/", so the Streamlit workspace is exposed at WORKSPACE_PATH and
-    # mapped back onto Streamlit's own root here. Streamlit's asset routes (/static, /_stcore,
-    # /media) are absolute and continue to proxy through untouched.
-    workspace_prefix = WORKSPACE_PATH.lstrip("/")
-    if path == workspace_prefix:
-        path = ""
-    elif path.startswith(f"{workspace_prefix}/"):
-        path = path[len(workspace_prefix) + 1 :]
+    # Streamlit runs with --server.baseUrlPath set to the workspace prefix, so it serves its pages
+    # and websocket under /workspace/. Its built HTML still references assets at root-relative
+    # /static/... though, so those are mapped back onto the prefixed path Streamlit actually
+    # serves them from; without this the workspace loads a blank shell with 404s for all its JS.
+    if path.startswith("static/") or path.startswith("media/"):
+        path = f"{STREAMLIT_BASE_PATH}/{path}"
     target = f"{STREAMLIT_HTTP}/{path}"
     headers = dict(request.headers)
     headers.pop("host", None)
@@ -182,6 +198,8 @@ async def proxy_http(request: Request, path: str):
 
 @app.websocket("/{path:path}")
 async def proxy_websocket(websocket: WebSocket, path: str):
+    # Forwarded unchanged: Streamlit's baseUrlPath means it listens on /workspace/_stcore/stream,
+    # which is exactly what its browser client requests from the /workspace page.
     requested_protocols = websocket.headers.get("sec-websocket-protocol")
     subprotocols = requested_protocols.split(", ") if requested_protocols else None
     selected_protocol = subprotocols[0] if subprotocols else None

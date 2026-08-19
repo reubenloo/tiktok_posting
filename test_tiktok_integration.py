@@ -553,8 +553,13 @@ def test_workspace_moved_off_the_root_path():
     # "/" must be served by the landing route, not proxied to Streamlit.
     assert 'async def landing()' in server_source
     assert "landing_page_html()" in server_source
-    # The proxy must strip the workspace prefix before forwarding to Streamlit.
-    assert "workspace_prefix" in server_source
+    # Streamlit must be told it lives under the prefix, so the websocket URL its client builds
+    # matches the path it actually listens on. Rewriting paths in the proxy alone left the
+    # workspace loading its shell and then hanging on a rejected websocket.
+    assert "--server.baseUrlPath" in server_source
+    assert "STREAMLIT_BASE_PATH" in server_source
+    # Streamlit's built HTML still asks for root-relative /static assets.
+    assert 'path.startswith("static/")' in server_source
 
 
 def test_session_status_exposes_profile_not_tokens():
@@ -639,7 +644,7 @@ def test_status_error_is_not_reported_as_success():
 def test_app_version_is_current():
     """Verify APP_VERSION reflects the current release."""
     namespace = load_app_nodes("APP_VERSION")
-    assert namespace["APP_VERSION"] == "v0.15.0"
+    assert namespace["APP_VERSION"] == "v0.15.1"
 
 
 def test_sample_projects_function_returns_project_library():

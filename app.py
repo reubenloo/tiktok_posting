@@ -9,7 +9,7 @@ import streamlit as st
 import streamlit.components.v1 as st_components
 import httpx
 
-APP_VERSION = "v0.15.0"
+APP_VERSION = "v0.15.1"
 # Product identity and legal copy live in branding.py so app.py, server.py, and the crawlable
 # legal pages can never drift apart -- TikTok app review requires the app name, website title,
 # and domain to match exactly.
