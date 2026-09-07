@@ -9,11 +9,16 @@ import streamlit as st
 import streamlit.components.v1 as st_components
 import httpx
 
-APP_VERSION = "v0.15.1"
+APP_VERSION = "v0.16.0"
 # Product identity and legal copy live in branding.py so app.py, server.py, and the crawlable
 # legal pages can never drift apart -- TikTok app review requires the app name, website title,
 # and domain to match exactly.
 from branding import APP_NAME, TAGLINE  # noqa: E402
+# Durable storage: the workspace library, its approval history and the per-post status
+# timeline live in SQLite rather than session state, so refreshing the browser no longer
+# empties the product.
+import store  # noqa: E402
+import seed_data  # noqa: E402
 APP_ICON_PATH = Path(__file__).parent / "assets" / "em-posting-icon.png"
 
 # Externally-facing origin for browser links (Home, legal, sign-in). Production must set
@@ -174,7 +179,33 @@ def get_sample_projects():
     ]
 
 
+def seed_if_empty():
+    """Populate the library from the real content catalogue on first boot."""
+    if store.project_count() == 0:
+        # Actionable projects first, published history behind them: the workspace should open
+        # on what still needs a decision, not on the archive.
+        projects = get_sample_projects() + seed_data.seed_projects()
+        store.save_projects(projects)
+        for project in projects:
+            if project.get("is_seed"):
+                store.append_event(
+                    project["id"],
+                    "published",
+                    project.get("published_at", project.get("created", "")),
+                    "Published to TikTok",
+                )
+    return store.load_projects()
+
+
 def init_state():
+    store.init_db()
+    projects = seed_if_empty()
+    activity = store.load_activity()
+    if not activity:
+        activity = [
+            {"type": "create", "text": f"Library loaded with {len(projects)} projects", "time": "--"},
+        ]
+        store.append_activity(activity[0])
     defaults = {
         "asset": None,
         "queue": [],
@@ -182,11 +213,9 @@ def init_state():
         "receipts": [],
         "sent_count": 0,
         "reviewed": False,
-        "projects": get_sample_projects(),
+        "projects": projects,
         "current_project": None,
-        "activity_log": [
-            {"type": "create", "text": "Sample project 'A founder's night routine' added to library", "time": "14:30 UTC"},
-        ],
+        "activity_log": activity,
         "readiness_queue": [],
     }
     for key, value in defaults.items():
@@ -492,22 +521,69 @@ def project_asset(project):
     return {
         "filename": project["filename"],
         "title": project["title"],
-        "size_mb": project["size_mb"],
+        "size_mb": project.get("size_mb", 0.0),
         "duration": project.get("duration"),
-        "fingerprint": project["fingerprint"],
+        "fingerprint": project.get("fingerprint"),
         "source": "Direct upload",
-        "video_data": project["video_data"],
+        "video_data": project.get("video_data"),
     }
 
 
+def project_has_media(project):
+    """Seeded catalogue entries are history only -- they carry no uploadable MP4."""
+    return bool(project.get("is_sample") or project.get("video_data"))
+
+
 def add_activity(activity_type, text):
-    st.session_state.activity_log.insert(0, {
+    entry = {
         "type": activity_type,
         "text": text,
         "time": short_time(),
-    })
+    }
+    st.session_state.activity_log.insert(0, entry)
     if len(st.session_state.activity_log) > 50:
         st.session_state.activity_log = st.session_state.activity_log[:50]
+    store.append_activity(entry)
+
+
+def record_event(project_id, stage, detail="", data=None):
+    """Append one lifecycle step for a project and keep it on disk."""
+    store.append_event(project_id, stage, short_time(), detail, data)
+
+
+def _persistable(project):
+    """Strip raw bytes before storing. Video payloads stay in session, not the database."""
+    return {k: v for k, v in project.items() if k != "video_data"}
+
+
+# Library status vocabulary. "published" covers the historic catalogue seeded from the
+# content tracker; "handed_off" is a video this workspace sent to the creator's TikTok inbox.
+STATUS_LABELS = {
+    "ready": "Needs review",
+    "in_review": "In review",
+    "approved": "Approved",
+    "handed_off": "Handed off",
+    "published": "Published",
+}
+
+STATUS_PILLS = {
+    "ready": '<span class="pill pill-neutral">● Needs review</span>',
+    "in_review": '<span class="pill pill-preview">● In review</span>',
+    "approved": '<span class="pill pill-ok">● Approved</span>',
+    "handed_off": '<span class="pill pill-ok">● Handed off</span>',
+    "published": '<span class="pill pill-ok">● Published</span>',
+}
+
+STAGE_LABELS = {
+    "created": "Added to library",
+    "approved": "Approved",
+    "handed_off": "Handed off to TikTok",
+    "published": "Published",
+}
+
+# Baseline creator accounts offered in the review screen. Accounts discovered in the library
+# (seeded catalogue, imported projects) are appended to these at render time.
+CREATOR_ACCOUNTS = ["Creator (primary)", "Studio brand", "Personal creator"]
 
 
 def get_project_by_id(project_id):
@@ -520,8 +596,12 @@ def get_project_by_id(project_id):
 def update_project(project_id, updates):
     for i, p in enumerate(st.session_state.projects):
         if p["id"] == project_id:
-            st.session_state.projects[i] = {**p, **updates}
-            return st.session_state.projects[i]
+            merged = {**p, **updates}
+            st.session_state.projects[i] = merged
+            # Persist immediately: an approval that only lived in session state was lost on
+            # the next browser refresh.
+            store.upsert_project(_persistable(merged))
+            return merged
     return None
 
 
@@ -551,14 +631,16 @@ def render_home():
     cols = st.columns(4)
     total_projects = len(st.session_state.projects)
     ready_count = sum(1 for p in st.session_state.projects if p["status"] == "ready")
-    in_review = sum(1 for p in st.session_state.projects if p["status"] == "in_review")
     approved_count = sum(1 for p in st.session_state.projects if p["status"] == "approved") + len(st.session_state.queue)
+    published_count = sum(
+        1 for p in st.session_state.projects if p["status"] in ("published", "handed_off")
+    )
 
     stats = [
         (cols[0], "Projects", str(total_projects)),
         (cols[1], "Needs review", str(ready_count)),
-        (cols[2], "In review", str(in_review)),
-        (cols[3], "Ready for handoff", str(approved_count)),
+        (cols[2], "Ready for handoff", str(approved_count)),
+        (cols[3], "Published", str(published_count)),
     ]
     for col, label, value in stats:
         with col:
@@ -571,22 +653,52 @@ def render_home():
     st.markdown("## Project library")
     st.write("Review finished videos and prepare them for platform handoff. Select a project to begin the review workflow.")
 
+    all_projects = st.session_state.projects
+    status_counts = {}
+    for project in all_projects:
+        status_counts[project["status"]] = status_counts.get(project["status"], 0) + 1
+
+    filter_options = ["All"] + [
+        f"{STATUS_LABELS.get(status, status.title())} ({count})"
+        for status, count in sorted(status_counts.items())
+    ]
+    chosen = st.radio(
+        "Filter library",
+        filter_options,
+        horizontal=True,
+        label_visibility="collapsed",
+        key="library_filter",
+    )
+    if chosen == "All":
+        projects = all_projects
+    else:
+        wanted = chosen.rsplit(" (", 1)[0]
+        projects = [
+            p for p in all_projects
+            if STATUS_LABELS.get(p["status"], p["status"].title()) == wanted
+        ]
+    st.caption(f"Showing {len(projects)} of {len(all_projects)} projects")
+
     # Project grid
     project_cols = st.columns(3)
-    for idx, project in enumerate(st.session_state.projects):
+    for idx, project in enumerate(projects):
         with project_cols[idx % 3]:
-            status_pill = {
-                "ready": '<span class="pill pill-neutral">● Needs review</span>',
-                "in_review": '<span class="pill pill-preview">● In review</span>',
-                "approved": '<span class="pill pill-ok">● Approved</span>',
-            }.get(project["status"], '<span class="pill pill-neutral">● Unknown</span>')
+            status_pill = STATUS_PILLS.get(
+                project["status"], '<span class="pill pill-neutral">● Unknown</span>'
+            )
+
+            meta_bits = [project["filename"]]
+            if project.get("duration") and project["duration"] != "--":
+                meta_bits.append(project["duration"])
+            if project.get("size_mb"):
+                meta_bits.append(f"{project['size_mb']} MB")
 
             st.markdown(
                 f"""
                 <div class="card" style="margin-bottom:1rem;">
                   {status_pill}
                   <h3 style="margin-top:.5rem;">{project["title"]}</h3>
-                  <p style="margin-bottom:.5rem;">{project["filename"]} · {project["duration"]} · {project["size_mb"]} MB</p>
+                  <p style="margin-bottom:.5rem;">{" · ".join(meta_bits)}</p>
                   <p style="font-size:.78rem;color:var(--faint);">Creator: {project["creator"]} · Added {project["created"]}</p>
                 </div>
                 """,
@@ -602,6 +714,23 @@ def render_home():
                 use_container_width=True,
                 on_click=open_project,
             )
+
+            events = store.load_events(project["id"])
+            if events:
+                with st.expander(f"History ({len(events)})"):
+                    for event in events:
+                        label = STAGE_LABELS.get(event["stage"], event["stage"].title())
+                        detail = f" — {event['detail']}" if event["detail"] else ""
+                        st.markdown(
+                            f"<div style='font-size:.78rem;'>"
+                            f"<strong>{label}</strong>{detail}<br>"
+                            f"<span style='color:var(--faint);'>{event['created_at']}</span>"
+                            f"</div>",
+                            unsafe_allow_html=True,
+                        )
+                        publish_id = event["data"].get("publish_id")
+                        if publish_id:
+                            st.caption(f"Publish ID: {publish_id}")
 
     st.write("")
 
@@ -835,10 +964,20 @@ def render_review():
             key=f"caption_{project['id']}",
         )
 
+        # Build the account list from the library itself so a project whose creator came
+        # from the seeded catalogue (e.g. "Creator (SG)") does not blow up the selectbox.
+        creator_options = list(CREATOR_ACCOUNTS)
+        for known in sorted({p.get("creator") for p in st.session_state.projects if p.get("creator")}):
+            if known not in creator_options:
+                creator_options.append(known)
+        current_creator = project.get("creator", creator_options[0])
+        if current_creator not in creator_options:
+            creator_options.append(current_creator)
+
         creator = st.selectbox(
             "Creator account",
-            ["Creator (primary)", "Studio brand", "Personal creator"],
-            index=["Creator (primary)", "Studio brand", "Personal creator"].index(project.get("creator", "Creator (primary)")),
+            creator_options,
+            index=creator_options.index(current_creator),
             key=f"creator_{project['id']}",
         )
 
@@ -874,7 +1013,12 @@ def render_review():
             }
 
             if approve:
-                if not all([rights, reviewed, policy, control, consent]):
+                if not project_has_media(project):
+                    st.warning(
+                        "This is a published project from the content history. "
+                        "Re-upload the MP4 in Studio to hand it off again."
+                    )
+                elif not all([rights, reviewed, policy, control, consent]):
                     st.warning("Complete all checklist items before approving.")
                 elif not caption.strip():
                     st.warning("Add caption notes before approving.")
@@ -883,6 +1027,12 @@ def render_review():
                     updates["approved"] = True
                     update_project(project["id"], updates)
                     add_activity("approve", f"'{project['title']}' approved for handoff")
+                    record_event(
+                        project["id"],
+                        "approved",
+                        "All five compliance checks confirmed",
+                        {"creator": creator},
+                    )
 
                     # Add to handoff queue
                     asset = project_asset(project)
@@ -948,7 +1098,10 @@ def render_studio():
             st.session_state.reviewed = True
             existing_ids = [p["id"] for p in st.session_state.projects]
             if "proj-001" not in existing_ids:
-                st.session_state.projects.insert(0, get_sample_projects()[0])
+                sample = get_sample_projects()[0]
+                st.session_state.projects.insert(0, sample)
+                store.upsert_project(_persistable(sample))
+                record_event("proj-001", "created", "Added from sample library")
             add_activity("create", "Added 'A founder's night routine' to library")
             st.session_state.current_project = "proj-001"
             goto("Review")
@@ -981,6 +1134,8 @@ def render_studio():
                     "fingerprint": fingerprint,
                 }
                 st.session_state.projects.insert(0, new_project)
+                store.upsert_project(_persistable(new_project))
+                record_event(new_project["id"], "created", f"Uploaded {uploaded.name}")
                 st.session_state.asset = {
                     "filename": uploaded.name,
                     "title": title,
@@ -1163,6 +1318,18 @@ def render_handoff():
                         st.session_state.receipts.insert(0, new_receipt)
                         st.session_state.queue.pop(index)
                         add_activity("upload", f"Handed off '{item['title']}' to TikTok drafts")
+                        if item.get("project_id"):
+                            record_event(
+                                item["project_id"],
+                                "handed_off",
+                                f"TikTok status: {status}",
+                                {
+                                    "publish_id": receipt["publish_id"],
+                                    "status": status,
+                                    "destination": receipt["destination"],
+                                },
+                            )
+                            update_project(item["project_id"], {"status": "handed_off"})
                         if (
                             st.session_state.asset
                             and st.session_state.asset.get("fingerprint") == item.get("fingerprint")

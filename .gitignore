@@ -8,3 +8,7 @@ __pycache__/
 !assets/sample_creator_video.mp4
 *.mov
 *.csv
+
+# Runtime workspace database (created on boot, seeded from seed_data.py).
+*.db
+workspace.db

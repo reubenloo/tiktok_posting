@@ -644,7 +644,7 @@ def test_status_error_is_not_reported_as_success():
 def test_app_version_is_current():
     """Verify APP_VERSION reflects the current release."""
     namespace = load_app_nodes("APP_VERSION")
-    assert namespace["APP_VERSION"] == "v0.15.1"
+    assert namespace["APP_VERSION"] == "v0.16.0"
 
 
 def test_sample_projects_function_returns_project_library():
